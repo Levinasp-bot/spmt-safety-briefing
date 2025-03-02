@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1085516274029",
+    "project_id": "safety-briefing",
+    "storage_bucket": "safety-briefing.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1085516274029:android:a566c383962174a3116264",
+        "android_client_info": {
+          "package_name": "com.example.spmtsafetybriefingapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC9cH52rTOcJsEYBu4wiYslj-c_eJky7io"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
