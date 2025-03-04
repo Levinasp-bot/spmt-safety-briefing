@@ -47,7 +47,7 @@ class RegisterActivity : ComponentActivity() {
         val terminalOptions = listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah")
         var terminal by remember { mutableStateOf(terminalOptions.first()) }
 
-        val roleOptions = listOf("HSSE", "Koordinator", "Anggota Security", "Anggota Operasional")
+        val roleOptions = listOf("Testing", "Security", "Operasional")
         var role by remember { mutableStateOf(roleOptions.first()) }
 
         val groupOptions = listOf("Group 1", "Group 2", "Group 3")
@@ -56,7 +56,7 @@ class RegisterActivity : ComponentActivity() {
         var imageUri by remember { mutableStateOf<Uri?>(null) }
         var isLoading by remember { mutableStateOf(false) }
 
-        val showGroupDropdown = role in listOf("Koordinator", "Anggota Security", "Anggota Operasional")
+        val showGroupDropdown = role in listOf("Security", "Operasional")
 
         val context = LocalContext.current
         val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
@@ -79,7 +79,6 @@ class RegisterActivity : ComponentActivity() {
             DropdownMenuComponent("Terminal", terminalOptions, terminal) { terminal = it }
             DropdownMenuComponent("Role", roleOptions, role) { role = it }
 
-            // Hanya tampilkan dropdown Group jika role yang dipilih sesuai
             if (showGroupDropdown) {
                 DropdownMenuComponent("Group", groupOptions, group) { group = it }
             }

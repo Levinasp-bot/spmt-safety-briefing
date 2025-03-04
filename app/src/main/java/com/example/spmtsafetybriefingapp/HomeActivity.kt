@@ -75,6 +75,7 @@ fun HomeScreen(onAddBriefingClick: () -> Unit) {
     var userLocation by remember { mutableStateOf<Location?>(null) }
     var isLocationValid by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
+    var userRole by remember { mutableStateOf("") }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -109,12 +110,81 @@ fun HomeScreen(onAddBriefingClick: () -> Unit) {
     }
 
     LaunchedEffect(auth.currentUser?.uid) {
-        auth.currentUser?.uid?.let { uid ->
-            try {
-                val document = firestore.collection("users").document(uid).get().await()
-                userName = document.getString("name") ?: "User"
-            } catch (e: Exception) {
-                e.printStackTrace()
+        coroutineScope.launch {
+            auth.currentUser?.uid?.let { uid ->
+                try {
+                    val userDoc = firestore.collection("users").document(uid).get().await()
+                    userRole = userDoc.getString("role") ?: ""
+                    val userTerminal = userDoc.getString("terminal") ?: ""
+                    val userGroup = userDoc.getString("group") ?: ""
+                    userName = userDoc.getString("name") ?: "User"
+
+                    Log.d("Firestore", "User: $userName, Role: $userRole, Terminal: $userTerminal, Group: $userGroup")
+
+                    val agendaQuery = when (userRole) {
+                        "Testing" -> {
+                            Log.d("Firestore", "Fetching agendas for Testing role...")
+                            firestore.collection("agenda").whereEqualTo("status", "aktif")
+                        }
+                        "Security" -> {
+                            Log.d("Firestore", "Fetching agendas for Security role - Terminal: $userTerminal, Group: $userGroup...")
+                            firestore.collection("agenda")
+                                .whereEqualTo("status", "aktif")
+                                .whereEqualTo("terminal", userTerminal)
+                                .whereEqualTo("groupSecurity", userGroup)
+                        }
+                        "Operasional" -> {
+                            Log.d("Firestore", "Fetching agendas for Operasional role - Terminal: $userTerminal, Group: $userGroup...")
+                            firestore.collection("agenda")
+                                .whereEqualTo("status", "aktif")
+                                .whereEqualTo("terminal", userTerminal)
+                                .whereEqualTo("groupOperational", userGroup)
+                        }
+                        else -> {
+                            Log.d("Firestore", "No matching role found. No agendas will be fetched.")
+                            null
+                        }
+                    }
+
+                    if (agendaQuery != null) {
+                        Log.d("Firestore", "Executing Firestore query...")
+                        try {
+                            val agendaSnapshot = agendaQuery.get().await()
+
+                            Log.d("Firestore", "Query executed successfully!")
+
+                            if (!agendaSnapshot.isEmpty) {
+                                Log.d("Firestore", "Agendas found: ${agendaSnapshot.documents.size}")
+                                activeAgenda = agendaSnapshot.documents.mapNotNull { document ->
+                                    val data = document.data?.toMutableMap()
+                                    val briefingId = document.id
+
+                                    if (briefingId.isNotEmpty()) {
+                                        data?.put("id", briefingId)
+                                        Log.d("Firestore", "Agenda found: ID = $briefingId")
+                                        data
+                                    } else {
+                                        Log.e("Firestore", "Briefing ID is empty")
+                                        null
+                                    }
+                                }
+                                Log.d("Firestore", "Total Active Agendas Found: ${activeAgenda.size}")
+                            } else {
+                                Log.w("Firestore", "No active agendas found matching the criteria.")
+                                activeAgenda = emptyList()
+                            }
+
+                        } catch (fetchError: Exception) {
+                            Log.e("Firestore", "Error executing query: ${fetchError.message}")
+                        }
+
+                    } else {
+                        activeAgenda = emptyList()
+                    }
+
+                } catch (e: Exception) {
+                    Log.e("Firestore", "Error fetching agendas: ${e.message}")
+                }
             }
         }
     }
@@ -224,15 +294,19 @@ fun HomeScreen(onAddBriefingClick: () -> Unit) {
                 }
                 Spacer(modifier = Modifier.height(16.dp))
 
-                if (activeAgenda.isNotEmpty()) {
-                    activeAgenda.forEach { agenda ->
-                        val briefingId = agenda["id"]?.toString() ?: ""
-                        if (briefingId.isNotEmpty()) {
-                            AttendanceDashboard(firestore)
-                        } else {
-                            Log.e("Debug", "Briefing ID is empty")
+                if (userRole == "Testing") {
+                    if (activeAgenda.isNotEmpty()) {
+                        activeAgenda.forEach { agenda ->
+                            val briefingId = agenda["id"]?.toString() ?: ""
+                            if (briefingId.isNotEmpty()) {
+                                AttendanceDashboard(firestore)
+                            } else {
+                                Log.e("Debug", "Briefing ID is empty")
+                            }
                         }
                     }
+                } else {
+                    Log.d("Debug", "User bukan Testing, tidak menampilkan AttendanceDashboard")
                 }
             }
         }

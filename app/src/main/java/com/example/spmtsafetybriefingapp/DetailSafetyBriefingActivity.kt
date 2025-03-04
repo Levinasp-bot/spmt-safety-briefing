@@ -8,9 +8,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -28,7 +30,7 @@ class DetailSafetyBriefingActivity : ComponentActivity() {
 
         if (briefingId == null) {
             Log.e("DetailActivity", "ID briefing tidak ditemukan!")
-            finish() // Tutup aktivitas jika ID tidak ada
+            finish()
             return
         }
 
@@ -38,7 +40,6 @@ class DetailSafetyBriefingActivity : ComponentActivity() {
             DetailSafetyBriefingScreen(briefingId)
         }
     }
-
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,7 +71,7 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Laporan Safety Briefing", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+                title = { Text("Laporan Safety Briefing", fontSize = 20.sp, fontWeight = FontWeight.Bold) }
             )
         }
     ) { paddingValues ->
@@ -82,71 +83,58 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
                 .verticalScroll(scrollState)
         ) {
             briefingData?.let { data ->
-                val terminal = data["terminal"] as? String ?: "Tidak diketahui"
-                val shift = data["shift"] as? String ?: "Tidak diketahui"
-                val perwira = data["perwira_briefing"] as? String ?: "Tidak diketahui"
-                val koordinator = data["koordinator"] as? String ?: "Tidak diketahui"
-
-                // Menyesuaikan format agenda sebagai list dari Firestore
-                val agendaList = when (val agenda = data["agenda"]) {
-                    is List<*> -> agenda.mapNotNull { it.toString() } // Pastikan bisa dikonversi ke String
-                    else -> emptyList()
+                CardSection("Informasi Briefing") {
+                    DetailItem("Terminal", data["terminal"] as? String ?: "Tidak diketahui")
+                    DetailItem("Shift", data["shift"] as? String ?: "Tidak diketahui")
+                    DetailItem("Perwira Briefing", data["perwira_briefing"] as? String ?: "Tidak diketahui")
+                    DetailItem("Koordinator Briefing", data["koordinator"] as? String ?: "Tidak diketahui")
                 }
 
-                val fotoUrl = data["photoPath"] as? String
-
-                // Menampilkan detail briefing
-                DetailItem(title = "Terminal", value = terminal)
-                DetailItem(title = "Shift", value = shift)
-                DetailItem(title = "Perwira Briefing", value = perwira)
-                DetailItem(title = "Koordinator Briefing", value = koordinator)
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(text = "Agenda Briefing", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                if (agendaList.isNotEmpty()) {
-                    agendaList.forEachIndexed { index, agenda ->
-                        Text(text = "${index + 1}. $agenda", fontSize = 14.sp)
+                CardSection("Agenda Briefing") {
+                    val agendaList = (data["agenda"] as? List<*>)?.mapNotNull { it.toString() } ?: emptyList()
+                    if (agendaList.isNotEmpty()) {
+                        agendaList.forEachIndexed { index, agenda ->
+                            Text(text = "${index + 1}. $agenda", fontSize = 14.sp)
+                        }
+                    } else {
+                        Text("Tidak ada agenda", fontSize = 14.sp, fontWeight = FontWeight.Light)
                     }
-            } else {
-                    Text(text = "Tidak ada agenda", fontSize = 14.sp, fontWeight = FontWeight.Light)
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                CardSection("Jumlah Pekerja (Orang)") {
+                    DetailItem("Hadir", data["jumlah_hadir"]?.toString() ?: "0")
+                    DetailItem("Sakit", data["jumlah_sakit"]?.toString() ?: "0")
+                    DetailItem("Cuti", data["jumlah_cuti"]?.toString() ?: "0")
+                }
 
-                // Jumlah pekerja
-                Text(text = "Jumlah Pekerja (orang)", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                DetailItem(title = "Hadir", value = data["jumlah_hadir"]?.toString() ?: "0")
-                DetailItem(title = "Sakit", value = data["jumlah_sakit"]?.toString() ?: "0")
-                DetailItem(title = "Cuti", value = data["jumlah_cuti"]?.toString() ?: "0")
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Foto Absensi
-                Text(text = "Foto Dokumentasi", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(modifier = Modifier.height(8.dp))
-
-                if (!fotoUrl.isNullOrEmpty()) {
-                    Image(
-                        painter = rememberImagePainter(fotoUrl),
-                        contentDescription = "Foto Dokumentasi",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                    )
-                } else {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_background),
-                        contentDescription = "Foto Placeholder",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                    )
+                CardSection("Foto Dokumentasi") {
+                    val fotoUrl = data["photoPath"] as? String
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!fotoUrl.isNullOrEmpty()) {
+                            Image(
+                                painter = rememberImagePainter(fotoUrl),
+                                contentDescription = "Foto Dokumentasi",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp)
+                            )
+                        } else {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_launcher_background),
+                                contentDescription = "Foto Placeholder",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Tombol Unduh PDF
                 Button(
                     onClick = { /* Aksi Unduh PDF */ },
                     modifier = Modifier
@@ -166,9 +154,24 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
 
 @Composable
 fun DetailItem(title: String, value: String) {
-    Column {
+    Column(modifier = Modifier.padding(bottom = 8.dp)) {
         Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.Gray)
         Text(text = value, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+fun CardSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0E73A7))
+            Spacer(modifier = Modifier.height(8.dp))
+            content()
+        }
     }
 }
