@@ -39,6 +39,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.*
+import com.google.firebase.firestore.FieldValue
 
 class FormSafetyBriefingActivity : ComponentActivity() {
     private val firestore = FirebaseFirestore.getInstance()
@@ -76,8 +77,8 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp).align(Alignment.CenterHorizontally)
             )
 
-            DropdownMenuInput("Terminal", terminal, { terminal = it }, listOf("Terminal 1", "Terminal 2"))
-            DropdownMenuInput("Shift", shift, { shift = it }, listOf("Pagi", "Siang", "Malam"))
+            DropdownMenuInput("Terminal", terminal, { terminal = it }, listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah"))
+            DropdownMenuInput("Shift", shift, { shift = it }, listOf("Shift 1 00:00 - 08:00", "Shift 2 08:00 - 16:00", "Shift 3 16:00 - 00:00"))
             DropdownMenuInput("Koordinator Briefing", koordinator, { koordinator = it }, listOf("John Doe", "Jane Doe"))
             DropdownMenuInput("Group Security", groupSecurity, { groupSecurity = it }, listOf("Alpha", "Bravo"))
             DropdownMenuInput("Group Operational", groupOperational, { groupOperational = it }, listOf("Ops 1", "Ops 2"))
@@ -168,7 +169,15 @@ class FormSafetyBriefingActivity : ComponentActivity() {
     }
 
     private fun saveToFirestore(data: Map<String, Any>) {
-        firestore.collection("agenda").add(data)
+        val documentRef = firestore.collection("agenda").document() // Buat dokumen baru
+        val briefingId = documentRef.id // Ambil nama dokumen sebagai briefingId
+
+        val updatedData = data.toMutableMap()
+        updatedData["briefingId"] = briefingId // Tambahkan briefingId ke dalam data
+        updatedData["status"] = "aktif" // Tambahkan status dengan nilai "aktif"
+        updatedData["timestamp"] = FieldValue.serverTimestamp() // Tambahkan timestamp otomatis dari server
+
+        documentRef.set(updatedData)
             .addOnSuccessListener {
                 Toast.makeText(this, "Data tersimpan", Toast.LENGTH_SHORT).show()
                 val intent = Intent(this, HomeActivity::class.java)
@@ -179,7 +188,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 Toast.makeText(this, "Gagal menyimpan data", Toast.LENGTH_SHORT).show()
             }
     }
-}
+
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -289,4 +298,4 @@ fun FormSafetyBriefingScreen(
             Text("Selanjutnya")
         }
     }
-}
+}}
