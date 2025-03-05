@@ -252,7 +252,7 @@ fun FormSafetyBriefingScreen(
 
         DropdownMenuInput("Terminal", terminal, { terminal = it }, listOf("Terminal 1", "Terminal 2"))
         DropdownMenuInput("Shift", shift, { shift = it }, listOf("Pagi", "Siang", "Malam"))
-        DropdownMenuInput("Koordinator Briefing", koordinator, { koordinator = it }, listOf("John Doe", "Jane Doe"))
+        DropdownMenuInput("Koordinator", koordinator, { koordinator = it }, listOf("John Doe", "Jane Doe"))
         DropdownMenuInput("Group Security", groupSecurity, { groupSecurity = it }, listOf("Alpha", "Bravo"))
         DropdownMenuInput("Group Operational", groupOperational, { groupOperational = it }, listOf("Ops 1", "Ops 2"))
 

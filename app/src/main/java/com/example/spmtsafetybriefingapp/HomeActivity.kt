@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
@@ -275,7 +276,7 @@ fun HomeScreen(onAddBriefingClick: () -> Unit) {
                             }
                         }
                     }
-            } else {
+                } else {
                     Box(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = Alignment.Center
@@ -319,19 +320,27 @@ fun AttendanceDashboard(firestore: FirebaseFirestore) {
     var selectedTerminal by remember { mutableStateOf("Semua") }
     val terminalOptions = listOf("Semua", "Terminal Jamrud", "Terminal Nilam", "Terminal Mirah")
 
+    var totalUsers by remember { mutableStateOf(0) }  // Total user di terminal
+    var absentUsers by remember { mutableStateOf(0) } // Total user yang belum absen
+    var presentUsers by remember { mutableStateOf(0) } // Jumlah user yang sudah absen
+
     LaunchedEffect(selectedTerminal) {
         try {
             Log.d("Firestore", "Fetching active agendas for terminal: $selectedTerminal")
 
-            val query = firestore.collection("agenda").whereEqualTo("status", "aktif")
-            if (selectedTerminal != "Semua") {
-                query.whereEqualTo("terminal", selectedTerminal)
+            val query = if (selectedTerminal == "Semua") {
+                firestore.collection("agenda").whereEqualTo("status", "aktif")
+            } else {
+                firestore.collection("agenda")
+                    .whereEqualTo("status", "aktif")
+                    .whereEqualTo("terminal", selectedTerminal)
             }
 
             val activeAgendas = query.get().await()
             Log.d("Firestore", "Total Active Agendas: ${activeAgendas.size()}")
 
             val allAttendances = mutableListOf<Pair<String, String>>()
+            val attendedUsers = mutableSetOf<String>()
 
             for (agenda in activeAgendas) {
                 val briefingId = agenda.id
@@ -343,6 +352,7 @@ fun AttendanceDashboard(firestore: FirebaseFirestore) {
 
                 val attendances = attendanceRef.documents.mapNotNull { doc ->
                     val name = doc.getString("userName") ?: "Unknown"
+                    attendedUsers.add(name)
                     val timestamp = doc.getTimestamp("timestamp")?.toDate()?.let {
                         SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(it)
                     } ?: "-"
@@ -352,6 +362,24 @@ fun AttendanceDashboard(firestore: FirebaseFirestore) {
             }
 
             attendanceList = allAttendances
+            presentUsers = attendedUsers.size // Simpan jumlah user yang sudah absen
+
+            // 🔹 Ambil Total User di Terminal Tersebut
+            if (selectedTerminal != "Semua") {
+                val usersQuery = firestore.collection("users")
+                    .whereEqualTo("terminal", selectedTerminal)
+                    .get()
+                    .await()
+
+                val usersInTerminal = usersQuery.documents.mapNotNull { it.getString("userName") }
+                totalUsers = usersInTerminal.size
+                absentUsers = usersInTerminal.count { it !in attendedUsers }
+            } else {
+                totalUsers = 0
+                absentUsers = 0
+            }
+
+            Log.d("Firestore", "Total Users: $totalUsers, Present Users: $presentUsers, Absent Users: $absentUsers")
         } catch (e: Exception) {
             Log.e("Firestore", "Error fetching attendance: ${e.message}")
             e.printStackTrace()
@@ -370,44 +398,77 @@ fun AttendanceDashboard(firestore: FirebaseFirestore) {
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        var expanded by remember { mutableStateOf(false) }
-
-        Box {
-            OutlinedButton(
-                onClick = { expanded = true },
-                modifier = Modifier
-                    .width(115.dp)
-                    .height(35.dp),
-                border = ButtonDefaults.outlinedButtonBorder,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Gray)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // 🔹 Dropdown Filter Terminal
+            var expanded by remember { mutableStateOf(false) }
+            Box {
+                OutlinedButton(
+                    onClick = { expanded = true },
+                    modifier = Modifier
+                        .width(115.dp)
+                        .height(35.dp),
+                    border = ButtonDefaults.outlinedButtonBorder,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Gray)
                 ) {
-                    Text(text = selectedTerminal, fontSize = 14.sp, color = Color.Gray)
-                    Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = "Dropdown Icon",
-                        tint = Color.Gray
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(text = selectedTerminal, fontSize = 14.sp, color = Color.Gray)
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Dropdown Icon",
+                            tint = Color.Gray
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    modifier = Modifier.width(119.dp)
+                ) {
+                    terminalOptions.forEach { terminal ->
+                        DropdownMenuItem(
+                            text = { Text(text = terminal, fontSize = 14.sp) },
+                            onClick = {
+                                selectedTerminal = terminal
+                                expanded = false
+                            }
+                        )
+                    }
                 }
             }
 
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.width(119.dp)
+            Box(
+                modifier = Modifier
+                    .width(100.dp)
+                    .height(50.dp)
+                    .background(Color(0xFF4CAF50), shape = RoundedCornerShape(8.dp))
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center
             ) {
-                terminalOptions.forEach { terminal ->
-                    DropdownMenuItem(
-                        text = { Text(text = terminal, fontSize = 14.sp) },
-                        onClick = {
-                            selectedTerminal = terminal
-                            expanded = false
-                        }
-                    )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "Sudah Absen", color = Color.White, fontSize = 12.sp)
+                    Text(text = "$presentUsers", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .width(100.dp)
+                    .height(50.dp)
+                    .background(Color(0xFFD32F2F), shape = RoundedCornerShape(8.dp))
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "Belum Absen", color = Color.White, fontSize = 12.sp)
+                    Text(text = "$absentUsers", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -429,7 +490,7 @@ fun AttendanceDashboard(firestore: FirebaseFirestore) {
                 modifier = Modifier.weight(1f).padding(start = 8.dp)
             )
             Text(
-                text = "Timestamp",
+                text = "Waktu Kehadiran",
                 color = Color.White,
                 fontSize = 14.sp,
                 modifier = Modifier.weight(1f).padding(end = 8.dp)
@@ -474,6 +535,7 @@ fun AttendanceDashboard(firestore: FirebaseFirestore) {
     }
 }
 
+
 @Composable
 fun SafetyBriefingCard(agenda: Map<String, Any>) {
     val context = LocalContext.current
@@ -489,10 +551,8 @@ fun SafetyBriefingCard(agenda: Map<String, Any>) {
     val participants = agenda["participants"] as? List<String> ?: emptyList()
     val briefingId = agenda["id"] as? String ?: ""
 
-    val maxParticipants = 30
+    var maxParticipants by remember { mutableStateOf(0) }
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
-    var userLocation by remember { mutableStateOf<Location?>(null) }
-    val isLocationValid by remember { mutableStateOf(false) }
     var shouldRefresh by remember { mutableStateOf(false) }
     var briefingData by remember { mutableStateOf<Map<String, Any>?>(null) }
     var listenerRegistration by remember { mutableStateOf<ListenerRegistration?>(null) }
@@ -512,6 +572,17 @@ fun SafetyBriefingCard(agenda: Map<String, Any>) {
                 .await()
 
             participantsCount = attendanceSnapshot.size()
+        }
+    }
+
+    LaunchedEffect(terminal) {
+        if (terminal.isNotEmpty() && terminal != "Tidak diketahui") {
+            val usersSnapshot = firestore.collection("users")
+                .whereEqualTo("terminal", terminal)
+                .get()
+                .await()
+
+            maxParticipants = usersSnapshot.size() // 🔹 Total user di terminal ini
         }
     }
 
@@ -646,7 +717,7 @@ fun SafetyBriefingCard(agenda: Map<String, Any>) {
                         }
                     }
                 ) {
-                    Text("Lokasi tidak sesuai!", color = Color.White)
+                    Text("Waktu dan Lokasi tidak sesuai!", color = Color.White)
                 }
             }
 

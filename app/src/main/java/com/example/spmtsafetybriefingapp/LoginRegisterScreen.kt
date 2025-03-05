@@ -30,7 +30,7 @@ fun LoginRegisterScreen(sharedPreferences: SharedPreferences) {
         verticalArrangement = Arrangement.Center
     ) {
         Image(
-            painter = painterResource(id = R.drawable.logo_spmt),
+            painter = painterResource(id = R.drawable.logo_pelindo),
             contentDescription = "Pelindo Logo",
             modifier = Modifier
                 .width(200.dp)

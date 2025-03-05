@@ -41,7 +41,7 @@ class LoginActivity : ComponentActivity() {
 
     private fun loginUser(email: String, password: String) {
         if (email.isBlank() || password.isBlank()) {
-            Toast.makeText(this, "Email dan password tidak boleh kosong", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "NIPP dan password tidak boleh kosong", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -92,7 +92,7 @@ fun LoginScreen(onLoginClick: (String, String) -> Unit, onRegisterClick: () -> U
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email", color = primaryColor) },
+            label = { Text("NIPP", color = primaryColor) },
             modifier = Modifier.fillMaxWidth(),
             colors = TextFieldDefaults.outlinedTextFieldColors(
                 focusedBorderColor = primaryColor,
@@ -123,7 +123,7 @@ fun LoginScreen(onLoginClick: (String, String) -> Unit, onRegisterClick: () -> U
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),  // Tinggi tombol 56.dp
+                .height(56.dp),
             enabled = !isLoading,
             colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
             shape = RoundedCornerShape(8.dp)  // Round corner 8.dp

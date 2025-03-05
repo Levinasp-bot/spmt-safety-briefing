@@ -40,7 +40,7 @@ fun SplashScreen() {
         contentAlignment = Alignment.Center
     ) {
         Image(
-            painter = painterResource(id = R.drawable.logo_spmt),
+            painter = painterResource(id = R.drawable.logo_pelindo),
             contentDescription = "Logo",
             modifier = Modifier.size(200.dp)
         )

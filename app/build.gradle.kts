@@ -19,6 +19,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    aaptOptions {
+        noCompress("tflite")
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -84,4 +88,6 @@ dependencies {
     implementation("com.google.api-client:google-api-client-android:1.33.2")
     implementation("com.google.http-client:google-http-client-gson:1.43.2")
     implementation("com.google.apis:google-api-services-drive:v3-rev197-1.25.0")
+    implementation("com.google.mlkit:face-detection:16.1.5")
+    implementation("org.tensorflow:tensorflow-lite:2.9.0")
 }
