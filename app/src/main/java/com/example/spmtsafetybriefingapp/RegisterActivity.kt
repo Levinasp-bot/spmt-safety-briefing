@@ -16,7 +16,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
@@ -71,6 +70,7 @@ class RegisterActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun RegisterScreen(onRegisterClick: (String, String, String, String, String?, String, Uri?, List<Float>?) -> Unit) {
         var password by remember { mutableStateOf("") }
@@ -80,15 +80,16 @@ class RegisterActivity : ComponentActivity() {
         val terminalOptions = listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah")
         var terminal by remember { mutableStateOf(terminalOptions.first()) }
 
-        val roleOptions = listOf("Testing", "Security", "Operasional")
+        val roleOptions = listOf("Brach Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi", "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE", "Koordinator Lapangan Pengamanan", "Komandan Peleton", "Anggota Pengamanan", "Chief Foreman", "Foreman", "Dispatcher")
         var role by remember { mutableStateOf(roleOptions.first()) }
 
-        val groupOptions = listOf("Group 1", "Group 2", "Group 3")
+        val groupOptions = listOf("Group A", "Group B", "Group C", "Group D")
         var group by remember { mutableStateOf(groupOptions.first()) }
-        val showGroupDropdown = role in listOf("Security", "Operasional")
+        val showGroupDropdown = role in listOf("Komandan Peleton", "Anggota Pengamanan", "Chief Foreman", "Foreman", "Dispatcher")
         var imageUri by remember { mutableStateOf<Uri?>(null) }
         var faceEmbedding by remember { mutableStateOf<List<Float>?>(null) }
         var isLoading by remember { mutableStateOf(false) }
+        val primaryColor = Color(0xFF0E73A7)
 
         val context = LocalContext.current
         val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
@@ -109,11 +110,32 @@ class RegisterActivity : ComponentActivity() {
             modifier = Modifier.fillMaxSize().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = "Daftar", fontSize = 24.sp, color = Color(0xFF0E73A7))
+            Text(text = "Daftar", fontSize = 24.sp, color = primaryColor)
             Spacer(modifier = Modifier.height(16.dp))
 
-            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nama") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = noEmployee, onValueChange = { noEmployee = it }, label = { Text("NIPP") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Nama", color = primaryColor) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    focusedBorderColor = primaryColor,
+                    unfocusedBorderColor = primaryColor,
+                    cursorColor = primaryColor
+                )
+            )
+
+            OutlinedTextField(
+                value = noEmployee,
+                onValueChange = { noEmployee = it },
+                label = { Text("NIPP", color = primaryColor) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    focusedBorderColor = primaryColor,
+                    unfocusedBorderColor = primaryColor,
+                    cursorColor = primaryColor
+                )
+            )
 
             DropdownMenuComponent("Terminal", terminalOptions, terminal) { terminal = it }
             DropdownMenuComponent("Jabatan", roleOptions, role) { role = it }
@@ -122,7 +144,18 @@ class RegisterActivity : ComponentActivity() {
                 DropdownMenuComponent("Group", groupOptions, group) { group = it }
             }
 
-            OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password", color = primaryColor) },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    focusedBorderColor = primaryColor,
+                    unfocusedBorderColor = primaryColor,
+                    cursorColor = primaryColor
+                )
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -155,7 +188,7 @@ class RegisterActivity : ComponentActivity() {
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp), // 🔹 Atur tinggi tombol menjadi 56dp
+                    .height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
                 shape = RoundedCornerShape(8.dp) // 🔹 Tambahkan rounded corner 8dp
             ) {
@@ -296,7 +329,7 @@ class RegisterActivity : ComponentActivity() {
         imageUri: Uri?,
         faceEmbedding: List<Float>?
     ) {
-        val fakeEmail = "$noEmployee@custom.auth" // 🔹 Konversi NIPP ke format email
+        val fakeEmail = "$noEmployee@gmail.com" // 🔹 Konversi NIPP ke format email
 
         auth.createUserWithEmailAndPassword(fakeEmail, password)
             .addOnSuccessListener { authResult ->

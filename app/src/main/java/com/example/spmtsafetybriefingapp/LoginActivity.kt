@@ -45,12 +45,13 @@ class LoginActivity : ComponentActivity() {
             return
         }
 
-        auth.signInWithEmailAndPassword(email, password)
+        // Tambahkan @gmail.com jika belum ada
+        val formattedEmail = if (!email.contains("@")) "$email@gmail.com" else email
+
+        auth.signInWithEmailAndPassword(formattedEmail, password)
             .addOnSuccessListener {
-                // Simpan status login di SharedPreferences
                 sharedPreferences.edit().putBoolean("is_logged_in", true).apply()
 
-                // Arahkan ke HomeActivity dan hapus LoginActivity dari history
                 val intent = Intent(this, HomeActivity::class.java)
                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                 startActivity(intent)

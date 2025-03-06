@@ -94,6 +94,16 @@
             android:exported="true"
             android:theme="@style/Theme.SPMTSafetyBriefingApp" />
 
+        <activity
+            android:name=".GagalAbsensiActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SPMTSafetyBriefingApp" />
+
+        <activity
+            android:name=".HistoryActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SPMTSafetyBriefingApp" />
+
     </application>
 
 </manifest>
