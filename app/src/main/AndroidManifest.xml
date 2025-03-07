@@ -104,6 +104,11 @@
             android:exported="true"
             android:theme="@style/Theme.SPMTSafetyBriefingApp" />
 
+        <activity
+            android:name=".UnduhPdfActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SPMTSafetyBriefingApp" />
+
     </application>
 
 </manifest>

@@ -91,4 +91,5 @@ dependencies {
     implementation("com.google.mlkit:face-detection:16.1.5")
     implementation("org.tensorflow:tensorflow-lite:2.9.0")
     implementation("com.google.accompanist:accompanist-swiperefresh:0.27.0")
+    implementation("com.itextpdf:itext7-core:7.2.3")
 }

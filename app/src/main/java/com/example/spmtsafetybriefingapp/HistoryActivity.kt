@@ -6,6 +6,8 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -45,10 +47,10 @@ class HistoryActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(navController: NavController) {
+    val context = LocalContext.current
     val agendaList = remember { mutableStateListOf<Agenda>() }
     val firestore = FirebaseFirestore.getInstance()
 
-    // 🔹 Ambil data dari Firestore
     firestore.collection("agenda")
         .whereEqualTo("status", "selesai")
         .orderBy("timestamp", Query.Direction.DESCENDING)
@@ -59,8 +61,15 @@ fun HistoryScreen(navController: NavController) {
             }
             agendaList.clear()
             snapshot?.documents?.forEach { doc ->
-                val agenda = doc.toObject(Agenda::class.java)
-                agenda?.let { agendaList.add(it) }
+                val terminal = doc.getString("terminal") ?: "Tidak diketahui"
+                val shift = doc.getString("shift") ?: "Tidak diketahui"
+                val briefingId = doc.id  // 🔹 Ambil ID dokumen Firestore
+                val timestamp = doc.get("timestamp")?.let {
+                    if (it is Long) Timestamp(it / 1000, ((it % 1000) * 1000000).toInt()) else it as? Timestamp
+                }
+
+                val agenda = Agenda(briefingId, terminal, shift, timestamp)
+                agendaList.add(agenda)
             }
         }
 
@@ -75,7 +84,7 @@ fun HistoryScreen(navController: NavController) {
             TopAppBar(
                 title = {
                     Text(
-                        text = "Safety Briefing (Terminal ${agendaList.firstOrNull()?.terminal ?: "..."})",
+                        text = "Riwayat",
                         fontSize = 20.sp
                     )
                 },
@@ -102,13 +111,21 @@ fun HistoryScreen(navController: NavController) {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .clickable {
+                                    // 🔹 Intent ke DetailSafetyBriefingActivity dengan briefingId
+                                    val intent = Intent(context, DetailSafetyBriefingActivity::class.java)
+                                    intent.putExtra("briefingId", agenda.briefingId)
+                                    context.startActivity(intent)
+                                }
+                                .border(1.dp, Color(0xFF0E73A7), shape = RoundedCornerShape(8.dp)), // 🔹 Stroke biru
                             shape = RoundedCornerShape(8.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White) // 🔹 Warna putih
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Text(
-                                    text = "${index + 1}. Safety Briefing ${agenda.terminal}",
+                                    text = "Safety Briefing ${agenda.terminal}",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -118,7 +135,7 @@ fun HistoryScreen(navController: NavController) {
                                     color = Color.Gray
                                 )
                                 Text(
-                                    text = "Shift: ${agenda.shift}", // 🔹 Menampilkan Shift
+                                    text = "${agenda.shift}",
                                     fontSize = 14.sp,
                                     color = Color.Gray
                                 )
@@ -130,6 +147,7 @@ fun HistoryScreen(navController: NavController) {
         }
     }
 }
+
 
 fun formatTimestamp(date: Date): String {
     val format = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
@@ -189,6 +207,7 @@ fun BottomNavigationBar(navController: NavController) {
 }
 
 data class Agenda(
+    val briefingId: String = "",
     val terminal: String = "Tidak diketahui",
     val shift: String = "Tidak diketahui",
     val timestamp: Timestamp? = null
