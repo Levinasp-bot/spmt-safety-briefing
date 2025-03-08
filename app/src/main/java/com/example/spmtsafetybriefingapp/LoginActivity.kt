@@ -64,7 +64,7 @@ class LoginActivity : ComponentActivity() {
                                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                                 startActivity(intent)
                             } else {
-                                Toast.makeText(this, "Akun Anda belum disetujui oleh Manajer", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this, "Akun Anda belum disetujui oleh Manager Terminal", Toast.LENGTH_LONG).show()
                                 auth.signOut()
                             }
                         } else {

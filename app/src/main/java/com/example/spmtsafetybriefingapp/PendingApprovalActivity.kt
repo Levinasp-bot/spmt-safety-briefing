@@ -61,7 +61,7 @@ fun PendingApprovalScreen() {
 
 fun getPendingUsers(onResult: (List<DocumentSnapshot>) -> Unit) {
     FirebaseFirestore.getInstance().collection("users")
-        .whereEqualTo("isApproved", false) // Query hanya user yang belum disetujui
+        .whereEqualTo("isApproved", false)
         .get()
         .addOnSuccessListener { result ->
             onResult(result.documents)

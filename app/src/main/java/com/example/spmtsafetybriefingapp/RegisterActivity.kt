@@ -348,27 +348,29 @@ class RegisterActivity : ComponentActivity() {
                 val userMap = hashMapOf(
                     "userId" to userId,
                     "name" to name,
-                    "email" to fakeEmail, // 🔹 Simpan email palsu jika dibutuhkan
+                    "email" to fakeEmail,
                     "role" to role,
                     "group" to group,
-                    "noEmployee" to noEmployee, // 🔹 Simpan NIPP asli
+                    "noEmployee" to noEmployee,
                     "terminal" to terminal,
-                    "faceEmbedding" to faceEmbedding
+                    "faceEmbedding" to faceEmbedding,
+                    "isApproved" to false
                 )
 
                 FirebaseFirestore.getInstance().collection("users")
                     .document(userId)
                     .set(userMap)
                     .addOnSuccessListener {
-                        Toast.makeText(this, "Registrasi berhasil!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            this,
+                            "Menunggu persetujuan Manager Terminal.",
+                            Toast.LENGTH_SHORT
+                        ).show()
                         startActivity(Intent(this, LoginActivity::class.java))
                         finish()
                     }
-                    .addOnFailureListener { e ->
-                        Toast.makeText(this, "Gagal menyimpan data: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
             }
-            .addOnFailureListener { e ->
+                    .addOnFailureListener { e ->
                 Toast.makeText(this, "Registrasi gagal: ${e.message}", Toast.LENGTH_SHORT).show()
             }
     }
