@@ -59,14 +59,17 @@ fun HistoryScreen(navController: NavController) {
                 Log.e("Firestore", "Error fetching data", error)
                 return@addSnapshotListener
             }
+
             agendaList.clear()
+            Log.d("Firestore", "Total agenda ditemukan: ${snapshot?.documents?.size}")
+
             snapshot?.documents?.forEach { doc ->
+                val briefingId = doc.id
                 val terminal = doc.getString("terminal") ?: "Tidak diketahui"
                 val shift = doc.getString("shift") ?: "Tidak diketahui"
-                val briefingId = doc.id  // 🔹 Ambil ID dokumen Firestore
-                val timestamp = doc.get("timestamp")?.let {
-                    if (it is Long) Timestamp(it / 1000, ((it % 1000) * 1000000).toInt()) else it as? Timestamp
-                }
+                val timestamp = doc.getTimestamp("timestamp")
+
+                Log.d("Firestore", "Agenda ditemukan -> ID: $briefingId, Terminal: $terminal, Shift: $shift, Timestamp: $timestamp")
 
                 val agenda = Agenda(briefingId, terminal, shift, timestamp)
                 agendaList.add(agenda)
@@ -113,7 +116,6 @@ fun HistoryScreen(navController: NavController) {
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                                 .clickable {
-                                    // 🔹 Intent ke DetailSafetyBriefingActivity dengan briefingId
                                     val intent = Intent(context, DetailSafetyBriefingActivity::class.java)
                                     intent.putExtra("briefingId", agenda.briefingId)
                                     context.startActivity(intent)
@@ -163,7 +165,7 @@ fun BottomNavigationBar(navController: NavController) {
         NavigationBarItem(
             icon = {
                 Icon(
-                    painterResource(id = if (selectedItem == 0) R.drawable.home_filled else R.drawable.home_stroke),
+                    painterResource(id = if (selectedItem == 0) R.drawable.home_stroke else R.drawable.home_filled),
                     contentDescription = "Beranda"
                 )
             },
@@ -185,7 +187,7 @@ fun BottomNavigationBar(navController: NavController) {
         NavigationBarItem(
             icon = {
                 Icon(
-                    painterResource(id = if (selectedItem == 1) R.drawable.history_filled else R.drawable.history_stroke),
+                    painterResource(id = if (selectedItem == 1) R.drawable.history_stroke else R.drawable.history_filled),
                     contentDescription = "Riwayat"
                 )
             },

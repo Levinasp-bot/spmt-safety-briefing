@@ -87,7 +87,6 @@ class HomeActivity : ComponentActivity() {
             }
 
             if (isLoading) {
-                // Tampilkan indikator loading sementara menunggu data dari Firestore
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
@@ -160,17 +159,18 @@ class HomeActivity : ComponentActivity() {
                         val userGroup = userDoc.getString("group") ?: ""
 
                         val allowedRoles = listOf(
-                            "Brach Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
+                            "Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
                             "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE",
-                            "Koordinator Lapangan Pengamanan", "Komandan Peleton", "Chief Foreman"
+                            "Koordinator Lapangan Pengamanan"
                         )
-                        val operationalRoles = listOf("Foreman", "Dispatcher")
+                        val operationalRoles = listOf("Foreman", "Dispatcher", "Chief Foreman")
+                        val securityRoles = listOf("Anggota Pengamanan", "Komandan Peleton")
 
                         val agendaQuery = when {
                             userRole in allowedRoles -> {
                                 var query = firestore.collection("agenda").whereEqualTo("status", "aktif")
                                 when {
-                                    userRole == "Anggota Pengamanan" -> {
+                                    userRole in securityRoles -> {
                                         query = query.whereEqualTo("terminal", userTerminal)
                                             .whereEqualTo("groupSecurity", userGroup)
                                     }
@@ -201,7 +201,6 @@ class HomeActivity : ComponentActivity() {
             }
         }
 
-        // Panggil fetchActiveAgenda() saat pertama kali dibuka
         LaunchedEffect(Unit) {
             fetchActiveAgenda()
         }
@@ -295,13 +294,15 @@ class HomeActivity : ComponentActivity() {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Image(
-                                        painter = painterResource(id = R.drawable.ic_action_name),
-                                        contentDescription = "Tambah Briefing",
-                                        modifier = Modifier
-                                            .size(80.dp)
-                                            .clickable { onAddBriefingClick() }
-                                    )
+                                    if (userRole in listOf("Chief Foreman", "Komandan Peleton", "Koordinator Lapangan Pengamanan", "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah")) {
+                                        Image(
+                                            painter = painterResource(id = R.drawable.ic_action_name),
+                                            contentDescription = "Tambah Briefing",
+                                            modifier = Modifier
+                                                .size(80.dp)
+                                                .clickable { onAddBriefingClick() }
+                                        )
+                                    }
                                     Text(text = "Tidak ada safety briefing aktif", color = Color.Gray, fontSize = 14.sp)
                                 }
                             }
@@ -329,11 +330,6 @@ class HomeActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    private fun navigateToPendingApproval() {
-        val intent = Intent(this, PendingApprovalActivity::class.java)
-        startActivity(intent)
     }
 
     fun getPendingUserCount(onResult: (Int) -> Unit) {
@@ -372,9 +368,20 @@ class HomeActivity : ComponentActivity() {
 
                 val allAttendances = mutableListOf<Pair<String, String>>()
                 val attendedUsers = mutableSetOf<String>()
+                val validRoles = listOf(
+                    "Anggota Pengamanan", "Komandan Peleton",
+                    "Chief Foreman", "Foreman", "Dispatcher"
+                )
+
+                var userCount = 0 // Untuk menghitung totalUsers
 
                 for (agenda in activeAgendas) {
                     val briefingId = agenda.id
+                    val groupSecurity = agenda.getString("groupSecurity") ?: ""
+                    val groupOperational = agenda.getString("groupOperational") ?: ""
+
+                    Log.d("Firestore", "Agenda $briefingId -> GroupSecurity: $groupSecurity, GroupOperational: $groupOperational")
+
                     val attendanceRef = firestore.collection("agenda")
                         .document(briefingId)
                         .collection("attendance")
@@ -390,25 +397,36 @@ class HomeActivity : ComponentActivity() {
                         name to timestamp
                     }
                     allAttendances.addAll(attendances)
+
+                    // 🔹 Ambil total user yang sesuai dengan filter role dan group
+                    val userQuery = if (selectedTerminal == "Semua") {
+                        firestore.collection("users").whereIn("role", validRoles).get().await()
+                    } else {
+                        firestore.collection("users")
+                            .whereEqualTo("terminal", selectedTerminal)
+                            .whereIn("role", validRoles)
+                            .get()
+                            .await()
+                    }
+
+                    val filteredUsers = userQuery.documents.filter { doc ->
+                        val role = doc.getString("role") ?: ""
+                        val userGroup = doc.getString("group") ?: ""
+
+                        when (role) {
+                            "Anggota Pengamanan", "Komandan Peleton" -> userGroup == groupSecurity
+                            "Chief Foreman", "Foreman", "Dispatcher" -> userGroup == groupOperational
+                            else -> false
+                        }
+                    }
+
+                    userCount += filteredUsers.size // Tambahkan jumlah user dari agenda ini
                 }
 
                 attendanceList = allAttendances
                 presentUsers = attendedUsers.size // Simpan jumlah user yang sudah absen
-
-                // 🔹 Ambil Total User di Terminal Tersebut
-                if (selectedTerminal != "Semua") {
-                    val usersQuery = firestore.collection("users")
-                        .whereEqualTo("terminal", selectedTerminal)
-                        .get()
-                        .await()
-
-                    val usersInTerminal = usersQuery.documents.mapNotNull { it.getString("userName") }
-                    totalUsers = usersInTerminal.size
-                    absentUsers = usersInTerminal.count { it !in attendedUsers }
-                } else {
-                    totalUsers = 0
-                    absentUsers = 0
-                }
+                totalUsers = userCount // Total semua user yang valid
+                absentUsers = totalUsers - presentUsers
 
                 Log.d("Firestore", "Total Users: $totalUsers, Present Users: $presentUsers, Absent Users: $absentUsers")
             } catch (e: Exception) {
@@ -416,6 +434,7 @@ class HomeActivity : ComponentActivity() {
                 e.printStackTrace()
             }
         }
+
 
         Column(
             modifier = Modifier
@@ -548,7 +567,6 @@ class HomeActivity : ComponentActivity() {
                         }
                     }
 
-                    // 🔹 Menampilkan Data Absensi dengan Nomor Urut
                     itemsIndexed(sortedAttendanceList) { index, (name, timestamp) ->
                         Column(
                             modifier = Modifier
@@ -591,6 +609,7 @@ class HomeActivity : ComponentActivity() {
         val context = LocalContext.current
         val firestore = FirebaseFirestore.getInstance()
         val auth = FirebaseAuth.getInstance()
+        var userRole by remember { mutableStateOf("operator") } // Default "operator"
 
         val terminal = agenda["terminal"] as? String ?: "Tidak diketahui"
         val shift = agenda["shift"] as? String ?: "Tidak diketahui"
@@ -625,16 +644,62 @@ class HomeActivity : ComponentActivity() {
             }
         }
 
-        LaunchedEffect(terminal) {
-            if (terminal.isNotEmpty() && terminal != "Tidak diketahui") {
-                val usersSnapshot = firestore.collection("users")
-                    .whereEqualTo("terminal", terminal)
-                    .get()
-                    .await()
+        LaunchedEffect(terminal, userId) {
+            if (terminal.isNotEmpty() && terminal != "Tidak diketahui" && userId.isNotEmpty()) {
+                try {
+                    val userDoc = firestore.collection("users").document(userId).get().await()
 
-                maxParticipants = usersSnapshot.size() // 🔹 Total user di terminal ini
+                    val userRole = userDoc.getString("role") ?: ""
+                    val userGroup = userDoc.getString("group") ?: ""
+
+                    Log.d("Firestore", "User Login: ID=$userId, Role=$userRole, Group=$userGroup")
+
+                    // 🔹 Ambil data agenda untuk mendapatkan groupSecurity dan groupOperational
+                    val agendaDoc = firestore.collection("agenda").document(briefingId).get().await()
+                    val groupSecurity = agendaDoc.getString("groupSecurity") ?: ""
+                    val groupOperational = agendaDoc.getString("groupOperational") ?: ""
+
+                    Log.d("Firestore", "Agenda Groups -> Security: $groupSecurity, Operational: $groupOperational")
+
+                    val validRoles = listOf(
+                        "Anggota Pengamanan", "Komandan Peleton",
+                        "Chief Foreman", "Foreman", "Dispatcher"
+                    )
+
+                    val userQuery = firestore.collection("users")
+                        .whereEqualTo("terminal", terminal) // 🔹 Hanya filter terminal
+
+                    val usersSnapshot = userQuery.get().await()
+
+                    Log.d("Firestore", "Total Users di Terminal [$terminal]: ${usersSnapshot.size()}")
+
+                    val filteredUsers = usersSnapshot.documents.filter { doc ->
+                        val role = doc.getString("role") ?: ""
+                        val group = doc.getString("group") ?: ""
+
+                        val isValid = when (role) {
+                            "Anggota Pengamanan", "Komandan Peleton" ->
+                                role in validRoles && group == groupSecurity
+                            "Chief Foreman", "Foreman", "Dispatcher" ->
+                                role in validRoles && group == groupOperational
+                            else -> false
+                        }
+
+                        if (isValid) {
+                            Log.d("Firestore", "User Valid: ID=${doc.id}, Role=$role, Group=$group")
+                        }
+
+                        isValid
+                    }
+
+                    maxParticipants = filteredUsers.size
+                    Log.d("Firestore", "Total Participants yang Valid: $maxParticipants")
+                } catch (e: Exception) {
+                    Log.e("Firestore", "Gagal mengambil data pengguna", e)
+                }
             }
         }
+
 
         LaunchedEffect(userId) {
             if (userId.isNotEmpty()) {
@@ -735,44 +800,60 @@ class HomeActivity : ComponentActivity() {
                     }
                 }
 
-                Button(
-                    onClick = {
-                        if (!hasAttended) {
-                            Log.d("AbsensiButton", "Button Absensi ditekan")
+                var userRole by remember { mutableStateOf("") }
 
-                            fetchUserLocation(context, fusedLocationClient) { location ->
-                                if (location != null) {
-                                    validateLocation(firestore, location) { isValid ->
-                                        Log.d("AbsensiButton", "Status lokasi valid: $isValid")
+                LaunchedEffect(userId) {
+                    if (userId.isNotEmpty()) {
+                        try {
+                            val userDoc = firestore.collection("users").document(userId).get().await()
+                            userRole = userDoc.getString("role") ?: ""
+                            Log.d("Firestore", "User role: $userRole")
+                        } catch (e: Exception) {
+                            Log.e("Firestore", "Gagal mengambil data user", e)
+                        }
+                    }
+                }
 
-                                        if (isValid) {
-                                            val file = File(context.getExternalFilesDir(null), "photo.jpg")
-                                            val uri = FileProvider.getUriForFile(context, "com.example.spmtsafetybriefingapp.fileprovider", file)
-                                            photoUri.value = uri
-                                            takePictureLauncher.launch(uri)
-                                            showInvalidLocation = false
-                                        } else {
-                                            Log.d("GeoFence", "Lokasi tidak valid, tidak bisa melakukan absensi.")
-                                            showInvalidLocation = true
+                if (userRole !in listOf("Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi", "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE")) { // Hanya menampilkan button untuk role tertentu
+                    Button(
+                        onClick = {
+                            if (!hasAttended) {
+                                Log.d("AbsensiButton", "Button Absensi ditekan")
+
+                                fetchUserLocation(context, fusedLocationClient) { location ->
+                                    if (location != null) {
+                                        validateLocation(firestore, location) { isValid ->
+                                            Log.d("AbsensiButton", "Status lokasi valid: $isValid")
+
+                                            if (isValid) {
+                                                val file = File(context.getExternalFilesDir(null), "photo.jpg")
+                                                val uri = FileProvider.getUriForFile(context, "com.example.spmtsafetybriefingapp.fileprovider", file)
+                                                photoUri.value = uri
+                                                takePictureLauncher.launch(uri)
+                                                showInvalidLocation = false
+                                            } else {
+                                                Log.d("GeoFence", "Lokasi tidak valid, tidak bisa melakukan absensi.")
+                                                showInvalidLocation = true
+                                            }
                                         }
+                                    } else {
+                                        Log.e("AbsensiButton", "Gagal mendapatkan lokasi pengguna.")
+                                        showInvalidLocation = true
                                     }
-                                } else {
-                                    Log.e("AbsensiButton", "Gagal mendapatkan lokasi pengguna.")
-                                    showInvalidLocation = true
                                 }
                             }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (hasAttended) Color.Gray else Color(0xFF4CAF50)
-                    ),
-                    enabled = !hasAttended,
-                    shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
-                ) {
-                    Text(if (hasAttended) "Sudah Absen" else "Absensi")
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (hasAttended) Color.Gray else Color(0xFF4CAF50)
+                        ),
+                        enabled = !hasAttended,
+                        shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
+                    ) {
+                        Text(if (hasAttended) "Sudah Absen" else "Absensi")
+                    }
                 }
 
                 if (showInvalidLocation) {
@@ -787,6 +868,7 @@ class HomeActivity : ComponentActivity() {
                         Text("Waktu dan Lokasi tidak sesuai!", color = Color.White)
                     }
                 }
+
 
                 Spacer(modifier = Modifier.height(8.dp))
 
