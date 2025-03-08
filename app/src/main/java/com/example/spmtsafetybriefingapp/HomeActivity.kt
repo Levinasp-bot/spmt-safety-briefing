@@ -65,33 +65,72 @@ import java.util.Locale
 import kotlin.math.sqrt
 
 class HomeActivity : ComponentActivity() {
-    private lateinit var firestore: FirebaseFirestore
     private var interpreter: Interpreter? = null
+    private lateinit var auth: FirebaseAuth
+    private val firestore = FirebaseFirestore.getInstance()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        firestore = FirebaseFirestore.getInstance()
+        auth = FirebaseAuth.getInstance()
 
-        try {
-            val tfliteModel = loadModelFile()
-            interpreter = Interpreter(tfliteModel)
-            Log.d("TFLite", "Model berhasil dimuat.")
-        } catch (e: Exception) {
-            Log.e("TFLite", "Gagal memuat model", e)
-            Toast.makeText(this, "Gagal memuat model", Toast.LENGTH_LONG).show()
-            finish()
-        }
         setContent {
-            HomeScreen {
-                val intent = Intent(this, FormSafetyBriefingActivity::class.java)
-                startActivity(intent)
+            var userName by remember { mutableStateOf("") }
+            var userRole by remember { mutableStateOf("") }
+            var isLoading by remember { mutableStateOf(true) }
+
+            LaunchedEffect(Unit) {
+                fetchUserData { name, role ->
+                    userName = name
+                    userRole = role
+                    isLoading = false
+                }
+            }
+
+            if (isLoading) {
+                // Tampilkan indikator loading sementara menunggu data dari Firestore
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                HomeScreen(
+                    onAddBriefingClick = {
+                        val intent = Intent(this@HomeActivity, FormSafetyBriefingActivity::class.java)
+                        startActivity(intent)
+                    },
+                    navigateToPendingApproval = {
+                        val intent = Intent(this@HomeActivity, PendingApprovalActivity::class.java)
+                        startActivity(intent)
+                    },
+                    userName = userName,
+                    userRole = userRole
+                )
             }
         }
     }
 
+    private fun fetchUserData(onResult: (String, String) -> Unit) {
+        val userId = auth.currentUser?.uid ?: return
+
+        firestore.collection("users").document(userId)
+            .get()
+            .addOnSuccessListener { document ->
+                if (document.exists()) {
+                    val name = document.getString("name") ?: "User"
+                    val role = document.getString("role") ?: "Unknown Role"
+                    onResult(name, role)
+                } else {
+                    onResult("User", "Unknown Role")
+                }
+            }
+            .addOnFailureListener {
+                onResult("User", "Unknown Role")
+            }
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun HomeScreen(onAddBriefingClick: () -> Unit) {
+    fun HomeScreen(onAddBriefingClick: () -> Unit, navigateToPendingApproval: () -> Unit, userName: String, userRole: String) {
+        var pendingCount by remember { mutableStateOf(0) }
         val context = LocalContext.current
         val auth = FirebaseAuth.getInstance()
         val firestore = FirebaseFirestore.getInstance()
@@ -101,6 +140,12 @@ class HomeActivity : ComponentActivity() {
         val coroutineScope = rememberCoroutineScope()
         var userRole by remember { mutableStateOf("") }
         var isRefreshing by remember { mutableStateOf(false) } // 🔹 State untuk Refresh
+
+        LaunchedEffect(Unit) {
+            getPendingUserCount { count ->
+                pendingCount = count
+            }
+        }
 
         fun fetchActiveAgenda() {
             isRefreshing = true
@@ -185,6 +230,24 @@ class HomeActivity : ComponentActivity() {
                                     tint = Color.Black
                                 )
                             }
+                        },
+                        actions = {
+                            if (userRole == "Manager Operasi Jamrud" || userRole == "Manager Operasi Nilam Mirah") {
+                                Box {
+                                    IconButton(onClick = { navigateToPendingApproval() }) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.notif),
+                                            contentDescription = "Pending Approval"
+                                        )
+                                    }
+                                    if (pendingCount > 0) {
+                                        Badge(
+                                            modifier = Modifier.align(Alignment.TopEnd),
+                                            content = { Text(text = pendingCount.toString()) }
+                                        )
+                                    }
+                                }
+                            }
                         }
                     )
                 },
@@ -266,6 +329,20 @@ class HomeActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun navigateToPendingApproval() {
+        val intent = Intent(this, PendingApprovalActivity::class.java)
+        startActivity(intent)
+    }
+
+    fun getPendingUserCount(onResult: (Int) -> Unit) {
+        FirebaseFirestore.getInstance().collection("users")
+            .whereEqualTo("isApproved", false)
+            .get()
+            .addOnSuccessListener { result ->
+                onResult(result.size())
+            }
     }
 
     @Composable
@@ -793,7 +870,7 @@ class HomeActivity : ComponentActivity() {
                                 // Log nilai akurasi kecocokan wajah
                                 Log.d("FaceRecognition", "Akurasi wajah: ${similarity * 100}%")
 
-                                if (similarity >= 0.6) {
+                                if (similarity >= 0.4) {
                                     Toast.makeText(context, "Absensi berhasil! Akurasi: ${(similarity * 100).toInt()}%", Toast.LENGTH_SHORT).show()
 
                                     // Arahkan ke halaman AbsensiResultActivity dengan briefingId

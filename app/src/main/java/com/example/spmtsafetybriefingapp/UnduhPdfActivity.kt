@@ -61,10 +61,10 @@ class UnduhPdfActivity : ComponentActivity() {
         val briefingId = intent.getStringExtra("briefingId").orEmpty() // ✅ Lebih aman jika null
 
         setContent {
-                UnduhPdfScreen(briefingId) // ✅ Kirim briefingId ke composable
-            }
+            UnduhPdfScreen(briefingId) // ✅ Kirim briefingId ke composable
         }
     }
+}
 
 fun generatePdfFromCompose(activity: ComponentActivity, agenda: Agenda_detail?) {
     if (agenda == null) {
@@ -954,7 +954,6 @@ fun UnduhPdfScreen(briefingId: String) {
                 )
             }
 
-            // 🔹 Kolom 2: Jam
             Box(
                 modifier = Modifier
                     .weight(0.75f)

@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
+        android:requestLegacyExternalStorage="true"
         android:allowBackup="true"
         android:usesCleartextTraffic="true"
         android:extractNativeLibs="true"
@@ -106,6 +107,11 @@
 
         <activity
             android:name=".UnduhPdfActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SPMTSafetyBriefingApp" />
+
+        <activity
+            android:name=".PendingApprovalActivity"
             android:exported="true"
             android:theme="@style/Theme.SPMTSafetyBriefingApp" />
 

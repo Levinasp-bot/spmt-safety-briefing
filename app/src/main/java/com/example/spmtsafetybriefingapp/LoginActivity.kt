@@ -21,6 +21,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 
 class LoginActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
@@ -45,20 +46,39 @@ class LoginActivity : ComponentActivity() {
             return
         }
 
-        // Tambahkan @gmail.com jika belum ada
         val formattedEmail = if (!email.contains("@")) "$email@gmail.com" else email
 
         auth.signInWithEmailAndPassword(formattedEmail, password)
-            .addOnSuccessListener {
-                sharedPreferences.edit().putBoolean("is_logged_in", true).apply()
+            .addOnSuccessListener { authResult ->
+                val userId = authResult.user?.uid ?: return@addOnSuccessListener
 
-                val intent = Intent(this, HomeActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                startActivity(intent)
+                // Ambil data pengguna dari Firestore
+                FirebaseFirestore.getInstance().collection("users").document(userId).get()
+                    .addOnSuccessListener { document ->
+                        if (document.exists()) {
+                            val isApproved = document.getBoolean("isApproved") ?: false
+
+                            if (isApproved) {
+                                sharedPreferences.edit().putBoolean("is_logged_in", true).apply()
+                                val intent = Intent(this, HomeActivity::class.java)
+                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                startActivity(intent)
+                            } else {
+                                Toast.makeText(this, "Akun Anda belum disetujui oleh Manajer", Toast.LENGTH_LONG).show()
+                                auth.signOut()
+                            }
+                        } else {
+                            Toast.makeText(this, "Data pengguna tidak ditemukan", Toast.LENGTH_LONG).show()
+                            auth.signOut()
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        Toast.makeText(this, "Gagal memeriksa status akun: ${e.message}", Toast.LENGTH_LONG).show()
+                        auth.signOut()
+                    }
             }
-            .addOnFailureListener {
-                Toast.makeText(this, "Login gagal: ${it.localizedMessage}", Toast.LENGTH_LONG).show()
-                Log.e("Login", "Failed to login: ", it)
+            .addOnFailureListener { e ->
+                Toast.makeText(this, "Login gagal: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
             }
     }
 

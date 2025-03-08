@@ -1,9 +1,12 @@
 package com.example.spmtsafetybriefingapp
 
+import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
@@ -80,7 +83,7 @@ class RegisterActivity : ComponentActivity() {
         val terminalOptions = listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah")
         var terminal by remember { mutableStateOf(terminalOptions.first()) }
 
-        val roleOptions = listOf("Brach Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi", "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE", "Koordinator Lapangan Pengamanan", "Komandan Peleton", "Anggota Pengamanan", "Chief Foreman", "Foreman", "Dispatcher")
+        val roleOptions = listOf("Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi", "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE", "Koordinator Lapangan Pengamanan", "Komandan Peleton", "Anggota Pengamanan", "Chief Foreman", "Foreman", "Dispatcher")
         var role by remember { mutableStateOf(roleOptions.first()) }
 
         val groupOptions = listOf("Group A", "Group B", "Group C", "Group D")
@@ -97,8 +100,15 @@ class RegisterActivity : ComponentActivity() {
                 detectFace(bitmap) { croppedFace ->
                     if (croppedFace != null) {
                         faceEmbedding = getFaceEmbedding(croppedFace)
-                        val uri = Uri.parse(MediaStore.Images.Media.insertImage(context.contentResolver, croppedFace, "profile_photo", null))
-                        imageUri = uri
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val uri = saveBitmapToMediaStore(context, croppedFace)
+                            imageUri = uri
+                        } else {
+                            val uri = Uri.parse(MediaStore.Images.Media.insertImage(
+                                context.contentResolver, croppedFace, "profile_photo", null
+                            ))
+                            imageUri = uri
+                        }
                     } else {
                         Toast.makeText(context, "Wajah tidak terdeteksi!", Toast.LENGTH_SHORT).show()
                     }
@@ -362,5 +372,26 @@ class RegisterActivity : ComponentActivity() {
                 Toast.makeText(this, "Registrasi gagal: ${e.message}", Toast.LENGTH_SHORT).show()
             }
     }
+
+    private fun saveBitmapToMediaStore(context: Context, bitmap: Bitmap): Uri? {
+        val filename = "profile_photo_${System.currentTimeMillis()}.jpg"
+        val contentValues = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/SafetyBriefing")
+        }
+
+        val contentResolver = context.contentResolver
+        val imageUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+        imageUri?.let {
+            contentResolver.openOutputStream(it)?.use { outputStream ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+            }
+        }
+
+        return imageUri
+    }
+
 }
 
