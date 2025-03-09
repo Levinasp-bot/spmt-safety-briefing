@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -93,4 +94,5 @@ dependencies {
     implementation("org.tensorflow:tensorflow-lite:2.9.0")
     implementation("com.google.accompanist:accompanist-swiperefresh:0.27.0")
     implementation("com.itextpdf:itext7-core:7.2.3")
+    implementation("io.ktor:ktor-client-android:2.0.0")
 }

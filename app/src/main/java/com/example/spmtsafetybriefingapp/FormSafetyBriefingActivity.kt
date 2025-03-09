@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -14,14 +15,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -31,7 +30,19 @@ import androidx.compose.ui.unit.sp
 import coil.compose.rememberImagePainter
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.Response
+import org.json.JSONException
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -39,16 +50,35 @@ import java.util.*
 
 class FormSafetyBriefingActivity : ComponentActivity() {
     private val firestore = FirebaseFirestore.getInstance()
+    private val cloudinaryUrl = "https://api.cloudinary.com/v1_1/deki7dwe5/image/upload"
+    private val apiKey = "735724334454793"
+    private val apiSecret = "Cf_XNHVtkyQwvd8NM8BfFx3a0oE"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            FormSafetyBriefingScreen { data -> saveToFirestore(data) }
+            FormSafetyBriefingScreen { rawData, imageBitmap ->
+                val data = rawData.toMutableMap() // Konversi ke MutableMap
+
+                if (imageBitmap != null) {
+                    uploadImageToCloudinary(imageBitmap) { imageUrl ->
+                        data["photoPath"] = imageUrl ?: "" // Pastikan tidak null
+                        saveToFirestore(data)
+                    }
+                } else {
+                    saveToFirestore(data)
+                }
+            }
         }
     }
 
     @Composable
-    fun FormSafetyBriefingScreen(onSaveData: (Map<String, Any>) -> Unit) {
+    fun FormSafetyBriefingScreen(onSaveData: (Map<String, Any>, Bitmap?) -> Unit) {
+        var imageBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+        val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+            imageBitmap = bitmap
+        }
         var terminal by remember { mutableStateOf("") }
         var shift by remember { mutableStateOf("") }
         var koordinator by remember { mutableStateOf("") }
@@ -57,16 +87,18 @@ class FormSafetyBriefingActivity : ComponentActivity() {
         var agendaList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
         var imageUri by remember { mutableStateOf<Uri?>(null) }
         var isLoading by remember { mutableStateOf(false) }
+
         val context = LocalContext.current
 
-        val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
-            if (bitmap != null) {
-                imageUri = saveImageLocally(bitmap)
-            }
-        }
-
         val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-            uri?.let { imageUri = it }
+            uri?.let {
+                try {
+                    val bitmap = MediaStore.Images.Media.getBitmap(context.contentResolver, it)
+                    imageBitmap = bitmap
+                } catch (e: IOException) {
+                    e.printStackTrace()
+                }
+            }
         }
 
         Column(
@@ -129,7 +161,6 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             }
             Button(
                 onClick = {
-                    isLoading = true
                     val data = mapOf(
                         "terminal" to terminal,
                         "shift" to shift,
@@ -137,46 +168,79 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                         "groupSecurity" to groupSecurity,
                         "groupOperational" to groupOperational,
                         "agenda" to agendaList.map { it.text },
-                        "photoPath" to (imageUri?.toString() ?: ""),
                         "timestamp" to System.currentTimeMillis()
                     )
-                    onSaveData(data)
-                },
-                modifier = Modifier.fillMaxWidth().height(56.dp)
+                    onSaveData(data, imageBitmap)
+                }
             ) {
                 Text("Simpan Data")
             }
         }
     }
 
-    private fun saveImageLocally(bitmap: Bitmap): Uri {
-        val file = File(filesDir, "captured_image_${System.currentTimeMillis()}.jpg")
-        return try {
-            val outputStream = FileOutputStream(file)
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
-            outputStream.flush()
-            outputStream.close()
-            Uri.fromFile(file)
-        } catch (e: IOException) {
-            Log.e("SaveImage", "Gagal menyimpan gambar", e)
-            Uri.EMPTY
-        }
+    fun uploadImageToCloudinary(bitmap: Bitmap, onResult: (String?) -> Unit) {
+        val baos = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos)
+        val imageData = baos.toByteArray()
+
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("file", "image.jpg", RequestBody.create("image/*".toMediaTypeOrNull(), imageData))
+            .addFormDataPart("upload_preset", "ml_default") // Pastikan ini sesuai dengan Cloudinary Anda
+            .build()
+
+        val request = Request.Builder()
+            .url(cloudinaryUrl) // Pastikan cloudinaryUrl benar
+            .post(requestBody)
+            .build()
+
+        val client = OkHttpClient()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("CloudinaryUpload", "Gagal mengunggah gambar: ${e.message}", e)
+                e.printStackTrace()
+                onResult(null)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val responseBody = response.body?.string()
+                if (!response.isSuccessful || responseBody == null) {
+                    Log.e("CloudinaryUpload", "Upload gagal. Response: $responseBody")
+                    onResult(null)
+                    return
+                }
+
+                try {
+                    val jsonObject = JSONObject(responseBody)
+                    val imageUrl = jsonObject.optString("secure_url", "")
+
+                    if (imageUrl.isNotEmpty()) {
+                        Log.d("CloudinaryUpload", "Upload berhasil! URL: $imageUrl")
+                        onResult(imageUrl)
+                    } else {
+                        Log.e("CloudinaryUpload", "Response tidak mengandung secure_url: $responseBody")
+                        onResult(null)
+                    }
+                } catch (e: JSONException) {
+                    Log.e("CloudinaryUpload", "Error parsing JSON: ${e.message}", e)
+                    onResult(null)
+                }
+            }
+        })
     }
 
-    private fun saveToFirestore(data: Map<String, Any>) {
-        val documentRef = firestore.collection("agenda").document() // Buat dokumen baru
-        val briefingId = documentRef.id // Ambil nama dokumen sebagai briefingId
 
-        val updatedData = data.toMutableMap()
-        updatedData["briefingId"] = briefingId // Tambahkan briefingId ke dalam data
-        updatedData["status"] = "aktif" // Tambahkan status dengan nilai "aktif"
-        updatedData["timestamp"] = FieldValue.serverTimestamp() // Tambahkan timestamp otomatis dari server
 
-        documentRef.set(updatedData)
+    private fun saveToFirestore(data: MutableMap<String, Any>) {
+        val documentRef = firestore.collection("agenda").document()
+        data["briefingId"] = documentRef.id
+        data["status"] = "aktif"
+        data["timestamp"] = FieldValue.serverTimestamp()
+
+        documentRef.set(data)
             .addOnSuccessListener {
                 Toast.makeText(this, "Data tersimpan", Toast.LENGTH_SHORT).show()
-                val intent = Intent(this, HomeActivity::class.java)
-                startActivity(intent)
+                startActivity(Intent(this, HomeActivity::class.java))
                 finish()
             }
             .addOnFailureListener {
@@ -184,6 +248,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
