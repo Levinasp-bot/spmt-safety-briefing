@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -40,45 +39,65 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    private fun loginUser(email: String, password: String) {
-        if (email.isBlank() || password.isBlank()) {
+    private fun loginUser(nipp: String, password: String) {
+        if (nipp.isBlank() || password.isBlank()) {
             Toast.makeText(this, "NIPP dan password tidak boleh kosong", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val formattedEmail = if (!email.contains("@")) "$email@gmail.com" else email
+        val db = FirebaseFirestore.getInstance()
+        val auth = FirebaseAuth.getInstance()
 
-        auth.signInWithEmailAndPassword(formattedEmail, password)
-            .addOnSuccessListener { authResult ->
-                val userId = authResult.user?.uid ?: return@addOnSuccessListener
+        // 🔹 Cari pengguna berdasarkan NIPP
+        db.collection("users").whereEqualTo("noEmployee", nipp).limit(1).get()
+            .addOnSuccessListener { documents ->
+                if (!documents.isEmpty) {
+                    val userDoc = documents.documents[0] // Ambil dokumen pertama yang cocok
+                    val email = userDoc.getString("email") ?: ""
 
-                // Ambil data pengguna dari Firestore
-                FirebaseFirestore.getInstance().collection("users").document(userId).get()
-                    .addOnSuccessListener { document ->
-                        if (document.exists()) {
-                            val isApproved = document.getBoolean("isApproved") ?: false
+                    if (email.isNotBlank()) {
+                        // 🔹 Gunakan email yang ditemukan untuk login
+                        auth.signInWithEmailAndPassword(email, password)
+                            .addOnSuccessListener { authResult ->
+                                val userId = authResult.user?.uid ?: return@addOnSuccessListener
 
-                            if (isApproved) {
-                                sharedPreferences.edit().putBoolean("is_logged_in", true).apply()
-                                val intent = Intent(this, HomeActivity::class.java)
-                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                                startActivity(intent)
-                            } else {
-                                Toast.makeText(this, "Akun Anda belum disetujui oleh Manager Terminal", Toast.LENGTH_LONG).show()
-                                auth.signOut()
+                                // 🔹 Periksa status persetujuan akun
+                                db.collection("users").document(userId).get()
+                                    .addOnSuccessListener { document ->
+                                        if (document.exists()) {
+                                            val isApproved = document.getBoolean("isApproved") ?: false
+
+                                            if (isApproved) {
+                                                sharedPreferences.edit().putBoolean("is_logged_in", true).apply()
+                                                val intent = Intent(this, HomeActivity::class.java)
+                                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                                startActivity(intent)
+                                            } else {
+                                                Toast.makeText(this, "Akun Anda belum disetujui oleh Manager Terminal", Toast.LENGTH_LONG).show()
+                                                auth.signOut()
+                                            }
+                                        } else {
+                                            Toast.makeText(this, "Data pengguna tidak ditemukan", Toast.LENGTH_LONG).show()
+                                            auth.signOut()
+                                        }
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Toast.makeText(this, "Gagal memeriksa status akun: ${e.message}", Toast.LENGTH_LONG).show()
+                                        auth.signOut()
+                                    }
                             }
-                        } else {
-                            Toast.makeText(this, "Data pengguna tidak ditemukan", Toast.LENGTH_LONG).show()
-                            auth.signOut()
-                        }
+                            .addOnFailureListener { e ->
+                                Toast.makeText(this, "Login gagal: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                            }
+                    } else {
+                        Toast.makeText(this, "Email tidak ditemukan untuk NIPP ini", Toast.LENGTH_LONG).show()
                     }
-                    .addOnFailureListener { e ->
-                        Toast.makeText(this, "Gagal memeriksa status akun: ${e.message}", Toast.LENGTH_LONG).show()
-                        auth.signOut()
-                    }
+                } else {
+                    Toast.makeText(this, "NIPP tidak terdaftar", Toast.LENGTH_LONG).show()
+                }
             }
             .addOnFailureListener { e ->
-                Toast.makeText(this, "Login gagal: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Gagal mengambil data pengguna: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
             }
     }
 

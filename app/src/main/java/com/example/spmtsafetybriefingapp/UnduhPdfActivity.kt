@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.LayoutInflater
+import android.view.PixelCopy
 import android.view.View
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -53,8 +54,13 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.graphics.Rect
+import android.os.Build
+import androidx.annotation.RequiresApi
+import com.google.firebase.firestore.ListenerRegistration
 
 class UnduhPdfActivity : ComponentActivity() {
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -66,62 +72,90 @@ class UnduhPdfActivity : ComponentActivity() {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 fun generatePdfFromCompose(activity: ComponentActivity, agenda: Agenda_detail?) {
     if (agenda == null) {
         Toast.makeText(activity, "Data agenda tidak tersedia", Toast.LENGTH_SHORT).show()
         return
     }
 
-    // 🔹 1. Gunakan ComponentDialog agar memiliki LifecycleOwner yang benar
     val dialog = ComponentDialog(activity)
-
-    // 🔹 2. Gunakan ComposeView di dalam Dialog
     val pdfComposeView = ComposeView(activity).apply {
         setContent {
             PdfLayoutScreen(agenda) // Render layout tanpa tombol
         }
     }
 
-    // 🔹 3. Tambahkan ComposeView ke dalam dialog
     dialog.setContentView(pdfComposeView)
     dialog.window?.setLayout(1080, 1920)
-
-    // 🔹 4. Tampilkan Dialog agar ComposeView ter-attach ke window
     dialog.show()
 
     Handler(Looper.getMainLooper()).postDelayed({
-        // 🔹 5. Ambil screenshot setelah Dialog selesai dirender
-        pdfComposeView.measure(
-            View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY)
-        )
-        pdfComposeView.layout(0, 0, 1080, 1920)
-
         val bitmap = Bitmap.createBitmap(1080, 1920, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        pdfComposeView.draw(canvas)
 
-        // 🔹 6. Simpan ke PDF
-        val pdfDocument = PdfDocument()
-        val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, 1).create()
+        val location = IntArray(2)
+        pdfComposeView.getLocationInWindow(location)
+
+        val window = activity.window
+        val handler = Handler(Looper.getMainLooper())
+
+        PixelCopy.request(
+            window,
+            Rect(location[0], location[1], location[0] + pdfComposeView.width, location[1] + pdfComposeView.height),
+            bitmap,
+            { copyResult ->
+                if (copyResult == PixelCopy.SUCCESS) {
+                    saveBitmapAsPdf(activity, bitmap, agenda)
+                } else {
+                    Toast.makeText(activity, "Gagal mengambil tangkapan layar", Toast.LENGTH_SHORT).show()
+                }
+                dialog.dismiss()
+            },
+            handler
+        )
+    }, 500) // Tunggu 500ms agar rendering selesai
+}
+
+fun saveBitmapAsPdf(activity: ComponentActivity, bitmap: Bitmap, agenda: Agenda_detail) {
+    val pageHeight = 1800  // Tinggi konten per halaman (sebelum margin)
+    val marginTop = 100     // Margin atas untuk halaman kedua dan seterusnya
+    val marginBottom = 100  // Margin bawah untuk semua halaman
+    val totalHeight = bitmap.height
+    val pdfDocument = PdfDocument()
+
+    var yOffset = 0
+    var pageNumber = 1
+
+    while (yOffset < totalHeight) {
+        val isFirstPage = (pageNumber == 1)
+        val heightToCopy = minOf(pageHeight - if (isFirstPage) marginBottom else marginTop, totalHeight - yOffset)
+
+        if (heightToCopy <= 0) break
+
+        val pageBitmap = Bitmap.createBitmap(bitmap, 0, yOffset, bitmap.width, heightToCopy)
+
+        val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, pageHeight, pageNumber).create()
         val page = pdfDocument.startPage(pageInfo)
         val pdfCanvas = page.canvas
-        pdfCanvas.drawBitmap(bitmap, 0f, 0f, null)
+
+        val yOffsetCanvas = if (isFirstPage) 0f else marginTop.toFloat()
+        pdfCanvas.drawBitmap(pageBitmap, 0f, yOffsetCanvas, null)
         pdfDocument.finishPage(page)
 
-        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val fileName = "SafetyBriefing_${agenda.terminal}_$timeStamp.pdf"
+        yOffset += heightToCopy
+        pageNumber++
+    }
 
-        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        val file = File(downloadsDir, fileName)
-        pdfDocument.writeTo(FileOutputStream(file))
-        pdfDocument.close()
+    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    val fileName = "SafetyBriefing_${agenda.terminal}_$timeStamp.pdf"
 
-        Toast.makeText(activity, "PDF berhasil disimpan di ${file.absolutePath}", Toast.LENGTH_LONG).show()
+    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+    val file = File(downloadsDir, fileName)
 
-        // 🔹 7. Tutup dialog setelah screenshot selesai
-        dialog.dismiss()
-    }, 500) // Tunggu 500ms agar rendering selesai
+    pdfDocument.writeTo(FileOutputStream(file))
+    pdfDocument.close()
+
+    Toast.makeText(activity, "PDF berhasil disimpan di ${file.absolutePath}", Toast.LENGTH_LONG).show()
 }
 
 @Composable
@@ -129,7 +163,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(10.dp)
+            .padding(start = 28.dp, top = 10.dp, end = 28.dp) // Atur padding atas, kanan, kiri
             .background(Color.White)
     ) {
         // 🔹 Header dengan 3 Kolom
@@ -172,7 +206,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 Text(
                     "PENGENDALIAN PELAKSANAAN SAFETY BRIEFING",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp,
+                    fontSize = 9.sp,
                     textAlign = TextAlign.Center
                 )
             }
@@ -186,10 +220,10 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     .align(Alignment.CenterVertically), // ✅ Agar sejajar dengan lainnya
                 verticalArrangement = Arrangement.spacedBy(4.dp) // ✅ Jarak antar teks lebih proporsional
             ) {
-                Text("No Dokumen: ", fontSize = 8.sp, fontWeight = FontWeight.Normal)
+                Text("No Dokumen:  ", fontSize = 6.sp, fontWeight = FontWeight.Normal)
                 Divider(color = Color.Black, thickness = 1.dp)
 
-                Text("No Revisi: 0", fontSize = 8.sp, fontWeight = FontWeight.Normal)
+                Text("No Revisi: 0", fontSize = 6.sp, fontWeight = FontWeight.Normal)
                 Divider(color = Color.Black, thickness = 1.dp)
 
                 Text(
@@ -201,7 +235,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                             ).format(it)
                         } ?: "-"
                     }",
-                    fontSize = 8.sp, fontWeight = FontWeight.Normal
+                    fontSize = 6.sp, fontWeight = FontWeight.Normal
                 )
             }
         }
@@ -308,7 +342,13 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Text(": Anton Yudhiana", fontSize = 8.sp)
+                val text = when (agenda?.terminal) {
+                    "Terminal Jamrud" -> "Anton Yudhiana"
+                    "Terminal Mirah", "Terminal Nilam" -> "Dimas Wibowo"
+                    else -> "Nama Tidak Diketahui" // Jika terminal tidak cocok
+                }
+
+                Text(": $text", fontSize = 8.sp)
             }
 
             // 🔹 Kolom 3: Koordinator
@@ -496,7 +536,8 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                         painter = painter,
                         contentDescription = "Dokumentasi",
                         modifier = Modifier
-                            .height(20.dp) // 🔹 Sesuaikan tinggi gambar
+                            .width(100.dp)
+                            .height(40.dp) // 🔹 Sesuaikan tinggi gambar
                     )
                 }
             }
@@ -613,16 +654,50 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
 
         // 🔹 State untuk menyimpan jumlah pekerja
         var jumlahPekerja by remember { mutableStateOf(0) }
+        var jumlahHadir by remember { mutableStateOf(0) }
+        var jumlahSakit by remember { mutableStateOf(0) }
+        var jumlahCuti by remember { mutableStateOf(0) }
+        var jumlahIzin by remember { mutableStateOf(0) }
+        var tanpaKeterangan by remember { mutableStateOf(0) }
 
-// 🔹 Mengambil jumlah pekerja dari Firestore (sub-koleksi attendance)
-        LaunchedEffect(Unit) {
-            val briefingId = agenda?.briefingId ?: return@LaunchedEffect
+        var briefingData by remember { mutableStateOf<Map<String, Any>?>(null) }
+
+        LaunchedEffect(agenda) { // 🔹 Jalankan efek hanya jika agenda berubah
+            val briefingId = agenda?.briefingId
+            if (briefingId == null) {
+                Log.e("FirestoreDebug", "briefingId is null")
+                return@LaunchedEffect
+            }
+
             Firebase.firestore.collection("agenda")
                 .document(briefingId)
-                .collection("attendance") // Sub-koleksi attendance
+                .get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        Log.d("FirestoreDebug", "Data agenda ditemukan: ${document.data}")
+                        briefingData = document.data
+                        jumlahIzin = (document["izin"] as? List<*>)?.size ?: 0
+                        jumlahSakit = (document["sakit"] as? List<*>)?.size ?: 0
+                        jumlahCuti = (document["cuti"] as? List<*>)?.size ?: 0
+                        tanpaKeterangan = (document["tanpaKeterangan"] as? List<*>)?.size ?: 0
+                    } else {
+                        Log.e("FirestoreDebug", "Dokumen agenda tidak ditemukan")
+                    }
+                }
+                .addOnFailureListener { error ->
+                    Log.e("FirestoreDebug", "Gagal mengambil data agenda", error)
+                }
+
+            Firebase.firestore.collection("agenda")
+                .document(briefingId)
+                .collection("attendance")
                 .get()
                 .addOnSuccessListener { documents ->
-                    jumlahPekerja = documents.size() // Jumlah user dalam sub-koleksi
+                    jumlahPekerja = documents.size()
+                    Log.d("FirestoreDebug", "Jumlah pekerja hadir: $jumlahPekerja")
+                }
+                .addOnFailureListener { error ->
+                    Log.e("FirestoreDebug", "Gagal mengambil data attendance", error)
                 }
         }
 
@@ -659,7 +734,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 Text("$jumlahPekerja", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 3: 0
+            // 🔹 Kolom 3: Izin
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -667,10 +742,10 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     .padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("0", fontSize = 8.sp, textAlign = TextAlign.Center)
+                Text("$jumlahIzin", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 4: 0
+            // 🔹 Kolom 4: Sakit
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -678,10 +753,10 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     .padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("0", fontSize = 8.sp, textAlign = TextAlign.Center)
+                Text("$jumlahSakit", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 5: 0
+            // 🔹 Kolom 5: Cuti
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -689,9 +764,10 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     .padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("0", fontSize = 8.sp, textAlign = TextAlign.Center)
+                Text("$jumlahCuti", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
+            // 🔹 Kolom 6: Tanpa Keterangan
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -699,9 +775,45 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     .padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("0", fontSize = 8.sp, textAlign = TextAlign.Center)
+                Text("$tanpaKeterangan", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
         }
+
+        var namaSakit by remember { mutableStateOf<List<String>>(emptyList()) }
+        var namaCuti by remember { mutableStateOf<List<String>>(emptyList()) }
+        var namaIzin by remember { mutableStateOf<List<String>>(emptyList()) }
+        var namaTanpaKeterangan by remember { mutableStateOf<List<String>>(emptyList()) }
+
+        LaunchedEffect(agenda) {
+            val briefingId = agenda?.briefingId
+            if (briefingId == null) {
+                Log.e("FirestoreDebug", "briefingId is null")
+                return@LaunchedEffect
+            }
+
+            Firebase.firestore.collection("agenda")
+                .document(briefingId)
+                .get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        Log.d("FirestoreDebug", "Data agenda ditemukan: ${document.data}")
+
+                        // 🔹 Ambil nama pekerja berdasarkan kategori
+                        namaSakit = (document["sakit"] as? List<String>) ?: emptyList()
+                        namaCuti = (document["cuti"] as? List<String>) ?: emptyList()
+                        namaIzin = (document["izin"] as? List<String>) ?: emptyList()
+                        namaTanpaKeterangan = (document["tanpaKeterangan"] as? List<String>) ?: emptyList()
+                    } else {
+                        Log.e("FirestoreDebug", "Dokumen agenda tidak ditemukan")
+                    }
+                }
+                .addOnFailureListener { error ->
+                    Log.e("FirestoreDebug", "Gagal mengambil data agenda", error)
+                }
+        }
+
+
+        // 🔹 Nama Pekerja Sakit
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -709,7 +821,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 .border(1.dp, Color.Black)
                 .padding(4.dp)
         ) {
-            // 🔹 Kolom 1: Nama Pekerja Sakit
             Box(
                 modifier = Modifier
                     .weight(2f)
@@ -724,15 +835,21 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 )
             }
 
-            // 🔹 Kolom 2: Kosong
             Box(
                 modifier = Modifier
                     .weight(4f)
                     .border(1.dp, Color.Black)
                     .fillMaxHeight()
                     .padding(4.dp)
-            )
+            ) {
+                Column {
+                    namaSakit.forEach { nama ->
+                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
+                    }
+                }
+            }
         }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -754,7 +871,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     textAlign = TextAlign.Left
                 )
             }
-
             // 🔹 Kolom 2: Kosong
             Box(
                 modifier = Modifier
@@ -762,7 +878,50 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     .border(1.dp, Color.Black)
                     .fillMaxHeight()
                     .padding(4.dp)
-            )
+            ) {
+                Column {
+                    namaCuti.forEach { nama ->
+                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
+                    }
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .border(1.dp, Color.Black)
+                .padding(4.dp)
+        ) {
+            // 🔹 Kolom 1: Nama Pekerja Sakit
+            Box(
+                modifier = Modifier
+                    .weight(2f)
+                    .border(1.dp, Color.Black)
+                    .padding(4.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    "Nama Pekerja Izin",
+                    fontSize = 7.sp,
+                    textAlign = TextAlign.Left
+                )
+            }
+            // 🔹 Kolom 2: Kosong
+            Box(
+                modifier = Modifier
+                    .weight(4f)
+                    .border(1.dp, Color.Black)
+                    .fillMaxHeight()
+                    .padding(4.dp)
+            ) {
+                Column {
+                    namaIzin.forEach { nama ->
+                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
+                    }
+                }
+            }
         }
 
         Row(
@@ -782,19 +941,23 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
             ) {
                 Text(
                     "Nama Pekerja Tanpa Keterangan",
-                    fontSize = 8.sp,
+                    fontSize = 7.sp,
                     textAlign = TextAlign.Left
                 )
             }
-
-            // 🔹 Kolom 2: Kosong
             Box(
                 modifier = Modifier
                     .weight(4f)
                     .border(1.dp, Color.Black)
                     .fillMaxHeight()
                     .padding(4.dp)
-            )
+            ) {
+                Column {
+                    namaTanpaKeterangan.forEach { nama ->
+                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
+                    }
+                }
+            }
         }
 
         Row(
@@ -814,7 +977,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
             ) {
                 Text(
                     "Nama Pekerja Tidak Lengkap Atribut",
-                    fontSize = 8.sp,
+                    fontSize = 7.sp,
                     textAlign = TextAlign.Left
                 )
             }
@@ -831,6 +994,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun UnduhPdfScreen(briefingId: String) {
     val firestore = FirebaseFirestore.getInstance()
@@ -860,7 +1024,7 @@ fun UnduhPdfScreen(briefingId: String) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(10.dp)
+            .padding(start = 28.dp, top = 10.dp, end = 28.dp) // Atur padding atas, kanan, kiri
             .background(Color.White)
     ) {
         // 🔹 Header dengan 3 Kolom
@@ -903,7 +1067,7 @@ fun UnduhPdfScreen(briefingId: String) {
                 Text(
                     "PENGENDALIAN PELAKSANAAN SAFETY BRIEFING",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp,
+                    fontSize = 9.sp,
                     textAlign = TextAlign.Center
                 )
             }
@@ -917,15 +1081,15 @@ fun UnduhPdfScreen(briefingId: String) {
                     .align(Alignment.CenterVertically), // ✅ Agar sejajar dengan lainnya
                 verticalArrangement = Arrangement.spacedBy(4.dp) // ✅ Jarak antar teks lebih proporsional
             ) {
-                Text("No Dokumen: ", fontSize = 8.sp, fontWeight = FontWeight.Normal)
+                Text("No Dokumen: ", fontSize = 6.sp, fontWeight = FontWeight.Normal)
                 Divider(color = Color.Black, thickness = 1.dp)
 
-                Text("No Revisi: 0", fontSize = 8.sp, fontWeight = FontWeight.Normal)
+                Text("No Revisi: 0", fontSize = 6.sp, fontWeight = FontWeight.Normal)
                 Divider(color = Color.Black, thickness = 1.dp)
 
                 Text(
                     "Tanggal: ${agenda?.timestamp?.toDate()?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(it) } ?: "-"}",
-                    fontSize = 8.sp, fontWeight = FontWeight.Normal
+                    fontSize = 6.sp, fontWeight = FontWeight.Normal
                 )
             }
         }
@@ -1031,7 +1195,13 @@ fun UnduhPdfScreen(briefingId: String) {
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Text(": Anton Yudhiana", fontSize = 8.sp)
+                val text = when (agenda?.terminal) {
+                    "Terminal Jamrud" -> "Anton Yudhiana"
+                    "Terminal Mirah", "Terminal Nilam" -> "Dimas Wibowo"
+                    else -> "Nama Tidak Diketahui" // Jika terminal tidak cocok
+                }
+
+                Text(": $text", fontSize = 8.sp)
             }
 
             // 🔹 Kolom 3: Koordinator
@@ -1219,7 +1389,8 @@ fun UnduhPdfScreen(briefingId: String) {
                         painter = painter,
                         contentDescription = "Dokumentasi",
                         modifier = Modifier
-                            .height(20.dp) // 🔹 Sesuaikan tinggi gambar
+                            .width(100.dp)
+                            .height(40.dp) // 🔹 Sesuaikan tinggi gambar
                     )
                 }
             }
@@ -1332,17 +1503,53 @@ fun UnduhPdfScreen(briefingId: String) {
         }
 
         var jumlahPekerja by remember { mutableStateOf(0) }
+        var jumlahHadir by remember { mutableStateOf(0) }
+        var jumlahSakit by remember { mutableStateOf(0) }
+        var jumlahCuti by remember { mutableStateOf(0) }
+        var jumlahIzin by remember { mutableStateOf(0) }
+        var tanpaKeterangan by remember { mutableStateOf(0) }
 
-        LaunchedEffect(Unit) {
-            val briefingId = agenda?.briefingId ?: return@LaunchedEffect
+        var briefingData by remember { mutableStateOf<Map<String, Any>?>(null) }
+
+        LaunchedEffect(agenda) { // 🔹 Jalankan efek hanya jika agenda berubah
+            val briefingId = agenda?.briefingId
+            if (briefingId == null) {
+                Log.e("FirestoreDebug", "briefingId is null")
+                return@LaunchedEffect
+            }
+
             Firebase.firestore.collection("agenda")
                 .document(briefingId)
-                .collection("attendance") // Sub-koleksi attendance
+                .get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        Log.d("FirestoreDebug", "Data agenda ditemukan: ${document.data}")
+                        briefingData = document.data
+                        jumlahIzin = (document["izin"] as? List<*>)?.size ?: 0
+                        jumlahSakit = (document["sakit"] as? List<*>)?.size ?: 0
+                        jumlahCuti = (document["cuti"] as? List<*>)?.size ?: 0
+                        tanpaKeterangan = (document["tanpaKeterangan"] as? List<*>)?.size ?: 0
+                    } else {
+                        Log.e("FirestoreDebug", "Dokumen agenda tidak ditemukan")
+                    }
+                }
+                .addOnFailureListener { error ->
+                    Log.e("FirestoreDebug", "Gagal mengambil data agenda", error)
+                }
+
+            Firebase.firestore.collection("agenda")
+                .document(briefingId)
+                .collection("attendance")
                 .get()
                 .addOnSuccessListener { documents ->
-                    jumlahPekerja = documents.size() // Jumlah user dalam sub-koleksi
+                    jumlahPekerja = documents.size()
+                    Log.d("FirestoreDebug", "Jumlah pekerja hadir: $jumlahPekerja")
+                }
+                .addOnFailureListener { error ->
+                    Log.e("FirestoreDebug", "Gagal mengambil data attendance", error)
                 }
         }
+
 
 // 🔹 Row dengan 6 kolom
         Row(
@@ -1377,7 +1584,7 @@ fun UnduhPdfScreen(briefingId: String) {
                 Text("$jumlahPekerja", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 3: 0
+            // 🔹 Kolom 3: Izin
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -1385,10 +1592,10 @@ fun UnduhPdfScreen(briefingId: String) {
                     .padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("0", fontSize = 8.sp, textAlign = TextAlign.Center)
+                Text("$jumlahIzin", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 4: 0
+            // 🔹 Kolom 4: Sakit
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -1396,10 +1603,10 @@ fun UnduhPdfScreen(briefingId: String) {
                     .padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("0", fontSize = 8.sp, textAlign = TextAlign.Center)
+                Text("$jumlahSakit", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 5: 0
+            // 🔹 Kolom 5: Cuti
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -1407,10 +1614,10 @@ fun UnduhPdfScreen(briefingId: String) {
                     .padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("0", fontSize = 8.sp, textAlign = TextAlign.Center)
+                Text("$jumlahCuti", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 6: 0
+            // 🔹 Kolom 6: Tanpa Keterangan
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -1418,10 +1625,46 @@ fun UnduhPdfScreen(briefingId: String) {
                     .padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("0", fontSize = 8.sp, textAlign = TextAlign.Center)
+                Text("$tanpaKeterangan", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
         }
 
+
+        var namaSakit by remember { mutableStateOf<List<String>>(emptyList()) }
+        var namaCuti by remember { mutableStateOf<List<String>>(emptyList()) }
+        var namaIzin by remember { mutableStateOf<List<String>>(emptyList()) }
+        var namaTanpaKeterangan by remember { mutableStateOf<List<String>>(emptyList()) }
+
+        LaunchedEffect(agenda) {
+            val briefingId = agenda?.briefingId
+            if (briefingId == null) {
+                Log.e("FirestoreDebug", "briefingId is null")
+                return@LaunchedEffect
+            }
+
+            Firebase.firestore.collection("agenda")
+                .document(briefingId)
+                .get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        Log.d("FirestoreDebug", "Data agenda ditemukan: ${document.data}")
+
+                        // 🔹 Ambil nama pekerja berdasarkan kategori
+                        namaSakit = (document["sakit"] as? List<String>) ?: emptyList()
+                        namaCuti = (document["cuti"] as? List<String>) ?: emptyList()
+                        namaIzin = (document["izin"] as? List<String>) ?: emptyList()
+                        namaTanpaKeterangan = (document["tanpaKeterangan"] as? List<String>) ?: emptyList()
+                    } else {
+                        Log.e("FirestoreDebug", "Dokumen agenda tidak ditemukan")
+                    }
+                }
+                .addOnFailureListener { error ->
+                    Log.e("FirestoreDebug", "Gagal mengambil data agenda", error)
+                }
+        }
+
+
+        // 🔹 Nama Pekerja Sakit
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1429,7 +1672,6 @@ fun UnduhPdfScreen(briefingId: String) {
                 .border(1.dp, Color.Black)
                 .padding(4.dp)
         ) {
-            // 🔹 Kolom 1: Nama Pekerja Sakit
             Box(
                 modifier = Modifier
                     .weight(2f)
@@ -1444,15 +1686,21 @@ fun UnduhPdfScreen(briefingId: String) {
                 )
             }
 
-            // 🔹 Kolom 2: Kosong
             Box(
                 modifier = Modifier
                     .weight(4f)
                     .border(1.dp, Color.Black)
                     .fillMaxHeight()
                     .padding(4.dp)
-            )
+            ) {
+                Column {
+                    namaSakit.forEach { nama ->
+                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
+                    }
+                }
+            }
         }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1474,7 +1722,6 @@ fun UnduhPdfScreen(briefingId: String) {
                     textAlign = TextAlign.Left
                 )
             }
-
             // 🔹 Kolom 2: Kosong
             Box(
                 modifier = Modifier
@@ -1482,7 +1729,50 @@ fun UnduhPdfScreen(briefingId: String) {
                     .border(1.dp, Color.Black)
                     .fillMaxHeight()
                     .padding(4.dp)
-            )
+            ) {
+                Column {
+                    namaCuti.forEach { nama ->
+                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
+                    }
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .border(1.dp, Color.Black)
+                .padding(4.dp)
+        ) {
+            // 🔹 Kolom 1: Nama Pekerja Sakit
+            Box(
+                modifier = Modifier
+                    .weight(2f)
+                    .border(1.dp, Color.Black)
+                    .padding(4.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    "Nama Pekerja Izin",
+                    fontSize = 7.sp,
+                    textAlign = TextAlign.Left
+                )
+            }
+            // 🔹 Kolom 2: Kosong
+            Box(
+                modifier = Modifier
+                    .weight(4f)
+                    .border(1.dp, Color.Black)
+                    .fillMaxHeight()
+                    .padding(4.dp)
+            ) {
+                Column {
+                    namaIzin.forEach { nama ->
+                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
+                    }
+                }
+            }
         }
 
         Row(
@@ -1502,19 +1792,23 @@ fun UnduhPdfScreen(briefingId: String) {
             ) {
                 Text(
                     "Nama Pekerja Tanpa Keterangan",
-                    fontSize = 8.sp,
+                    fontSize = 7.sp,
                     textAlign = TextAlign.Left
                 )
             }
-
-            // 🔹 Kolom 2: Kosong
             Box(
                 modifier = Modifier
                     .weight(4f)
                     .border(1.dp, Color.Black)
                     .fillMaxHeight()
                     .padding(4.dp)
-            )
+            ) {
+                Column {
+                    namaTanpaKeterangan.forEach { nama ->
+                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
+                    }
+                }
+            }
         }
 
         Row(
@@ -1534,7 +1828,7 @@ fun UnduhPdfScreen(briefingId: String) {
             ) {
                 Text(
                     "Nama Pekerja Tidak Lengkap Atribut",
-                    fontSize = 8.sp,
+                    fontSize = 7.sp,
                     textAlign = TextAlign.Left
                 )
             }
@@ -1575,5 +1869,11 @@ data class Agenda_detail(
     val details: String? = "",
     val koordinator: String? = "",
     val photoPath: String? = "",
-    val agenda: List<String> = emptyList()
+    val agenda: List<String> = emptyList(),
+    val tanpaKeterangan: List<String> = emptyList(),
+    val izin: List<String> = emptyList(),
+    val cuti: List<String> = emptyList(),
+    val sakit: List<String> = emptyList(),
+    val groupSecurity: String? = "",
+    val groupOperational: String? = ""
 )

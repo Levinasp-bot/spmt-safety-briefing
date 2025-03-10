@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.rememberImagePainter
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceDetection
@@ -63,23 +64,23 @@ class RegisterActivity : ComponentActivity() {
         }
 
         setContent {
-            RegisterScreen { noEmployee, password, name, role, group, terminal, imageUri, faceEmbedding ->
+            RegisterScreen { noEmployee, email, password, name, role, group, terminal, imageUri, faceEmbedding ->
                 if (noEmployee.isBlank() || password.isBlank() || name.isBlank() || role.isBlank() ||  terminal.isBlank()) {
                     Toast.makeText(this, "Semua kolom harus diisi!", Toast.LENGTH_SHORT).show()
                     return@RegisterScreen
                 }
-                registerUser(noEmployee, password, name, role, group, terminal, imageUri, faceEmbedding)
+                registerUser(noEmployee, email, password, name, role, group, terminal, imageUri, faceEmbedding)
             }
         }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun RegisterScreen(onRegisterClick: (String, String, String, String, String?, String, Uri?, List<Float>?) -> Unit) {
+    fun RegisterScreen(onRegisterClick: (String, String, String, String, String, String?, String, Uri?, List<Float>?) -> Unit) {
         var password by remember { mutableStateOf("") }
         var name by remember { mutableStateOf("") }
         var noEmployee by remember { mutableStateOf("") }
-
+        var email by remember { mutableStateOf("") }
         val terminalOptions = listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah")
         var terminal by remember { mutableStateOf(terminalOptions.first()) }
 
@@ -147,6 +148,18 @@ class RegisterActivity : ComponentActivity() {
                 )
             )
 
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email", color = primaryColor) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    focusedBorderColor = primaryColor,
+                    unfocusedBorderColor = primaryColor,
+                    cursorColor = primaryColor
+                )
+            )
+
             DropdownMenuComponent("Terminal", terminalOptions, terminal) { terminal = it }
             DropdownMenuComponent("Jabatan", roleOptions, role) { role = it }
 
@@ -194,7 +207,7 @@ class RegisterActivity : ComponentActivity() {
                 onClick = {
                     isLoading = true
                     val selectedGroup = if (showGroupDropdown) group else null
-                    onRegisterClick(noEmployee, password, name, role, group, terminal, imageUri, faceEmbedding)
+                    onRegisterClick(noEmployee, email, password, name, role, group, terminal, imageUri, faceEmbedding)
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -330,7 +343,8 @@ class RegisterActivity : ComponentActivity() {
     }
 
     private fun registerUser(
-        noEmployee: String, // 🔹 Gunakan NIPP sebagai username
+        noEmployee: String,
+        email: String,
         password: String,
         name: String,
         role: String,
@@ -339,38 +353,53 @@ class RegisterActivity : ComponentActivity() {
         imageUri: Uri?,
         faceEmbedding: List<Float>?
     ) {
-        val fakeEmail = "$noEmployee@gmail.com" // 🔹 Konversi NIPP ke format email
 
-        auth.createUserWithEmailAndPassword(fakeEmail, password)
+        auth.createUserWithEmailAndPassword(email, password)
             .addOnSuccessListener { authResult ->
                 val userId = authResult.user?.uid ?: return@addOnSuccessListener
 
-                val userMap = hashMapOf(
-                    "userId" to userId,
-                    "name" to name,
-                    "email" to fakeEmail,
-                    "role" to role,
-                    "group" to group,
-                    "noEmployee" to noEmployee,
-                    "terminal" to terminal,
-                    "faceEmbedding" to faceEmbedding,
-                    "isApproved" to false
-                )
+                FirebaseMessaging.getInstance().token
+                    .addOnCompleteListener { task ->
+                        if (!task.isSuccessful) {
+                            Log.e("FCM", "Fetching FCM token failed", task.exception)
+                            return@addOnCompleteListener
+                        }
 
-                FirebaseFirestore.getInstance().collection("users")
-                    .document(userId)
-                    .set(userMap)
-                    .addOnSuccessListener {
-                        Toast.makeText(
-                            this,
-                            "Menunggu persetujuan Manager Terminal.",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        startActivity(Intent(this, LoginActivity::class.java))
-                        finish()
+                        val fcmToken = task.result
+                        Log.d("FCM", "FCM Token: $fcmToken")
+
+                        // 🔹 Simpan data user termasuk FCM Token ke Firestore
+                        val userMap = hashMapOf(
+                            "userId" to userId,
+                            "name" to name,
+                            "email" to email,
+                            "role" to role,
+                            "group" to group,
+                            "noEmployee" to noEmployee,
+                            "terminal" to terminal,
+                            "faceEmbedding" to faceEmbedding,
+                            "isApproved" to false,
+                            "fcmToken" to fcmToken // ✅ Simpan token ke Firestore
+                        )
+
+                        FirebaseFirestore.getInstance().collection("users")
+                            .document(userId)
+                            .set(userMap)
+                            .addOnSuccessListener {
+                                Toast.makeText(
+                                    this,
+                                    "Menunggu persetujuan Manager Terminal.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                startActivity(Intent(this, LoginActivity::class.java))
+                                finish()
+                            }
+                            .addOnFailureListener { e ->
+                                Toast.makeText(this, "Gagal menyimpan data: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
                     }
             }
-                    .addOnFailureListener { e ->
+            .addOnFailureListener { e ->
                 Toast.makeText(this, "Registrasi gagal: ${e.message}", Toast.LENGTH_SHORT).show()
             }
     }

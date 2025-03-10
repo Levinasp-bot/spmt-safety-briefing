@@ -67,7 +67,9 @@ fun LoginRegisterScreen(sharedPreferences: SharedPreferences) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        TextButton(onClick = { /* Arahkan ke Forgot Password */ }) {
+        TextButton(
+            onClick = { context.startActivity(Intent(context, ForgotPasswordActivity::class.java)) }
+        ) {
             Text(
                 text = "Lupa password?",
                 fontSize = 14.sp,

@@ -115,6 +115,11 @@
             android:exported="true"
             android:theme="@style/Theme.SPMTSafetyBriefingApp" />
 
+        <activity
+            android:name=".ForgotPasswordActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SPMTSafetyBriefingApp" />
+
     </application>
 
 </manifest>

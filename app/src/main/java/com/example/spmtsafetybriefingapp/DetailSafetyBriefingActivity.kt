@@ -50,10 +50,16 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
     val firestore = FirebaseFirestore.getInstance()
     val context = LocalContext.current
     var briefingData by remember { mutableStateOf<Map<String, Any>?>(null) }
+    var jumlahHadir by remember { mutableStateOf(0) }
+    var jumlahSakit by remember { mutableStateOf(0) }
+    var jumlahCuti by remember { mutableStateOf(0) }
+    var jumlahIzin by remember { mutableStateOf(0) }
+    var tanpaKeterangan by remember { mutableStateOf(0) }
     val scrollState = rememberScrollState()
     var listenerRegistration by remember { mutableStateOf<ListenerRegistration?>(null) }
 
     DisposableEffect(briefingId) {
+        // Listen for agenda document changes
         listenerRegistration = firestore.collection("agenda").document(briefingId)
             .addSnapshotListener { document, error ->
                 if (error != null) {
@@ -62,9 +68,21 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
                 }
                 if (document != null && document.exists()) {
                     briefingData = document.data
+                    jumlahSakit = (document["sakit"] as? List<*>)?.size ?: 0
+                    jumlahCuti = (document["cuti"] as? List<*>)?.size ?: 0
+                    jumlahIzin = (document["izin"] as? List<*>)?.size ?: 0
+                    tanpaKeterangan  = (document["tanpaKeterangan"] as? List<*>)?.size ?: 0
                     Log.d("FirestoreData", "Data yang diterima: ${document.data}")
                 }
             }
+
+        // Count documents in the attendance subcollection
+        val attendanceRef = firestore.collection("agenda").document(briefingId).collection("attendance")
+        attendanceRef.get().addOnSuccessListener { snapshot ->
+            jumlahHadir = snapshot.size()
+        }.addOnFailureListener { error ->
+            Log.e("FirestoreError", "Gagal mengambil jumlah hadir", error)
+        }
 
         onDispose {
             listenerRegistration?.remove()
@@ -105,9 +123,11 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
                 }
 
                 CardSection("Jumlah Pekerja (Orang)") {
-                    DetailItem("Hadir", data["jumlah_hadir"]?.toString() ?: "0")
-                    DetailItem("Sakit", data["jumlah_sakit"]?.toString() ?: "0")
-                    DetailItem("Cuti", data["jumlah_cuti"]?.toString() ?: "0")
+                    DetailItem("Hadir", jumlahHadir.toString())
+                    DetailItem("Sakit", jumlahSakit.toString())
+                    DetailItem("Cuti", jumlahCuti.toString())
+                    DetailItem("Izin", jumlahIzin.toString())
+                    DetailItem("Tanpa Keterangan", tanpaKeterangan.toString())
                 }
 
                 CardSection("Foto Dokumentasi") {
@@ -141,7 +161,7 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
                 Button(
                     onClick = {
                         val intent = Intent(context, UnduhPdfActivity::class.java)
-                        intent.putExtra("briefingId", briefingId)  // 🔹 Kirim briefingId
+                        intent.putExtra("briefingId", briefingId)
                         context.startActivity(intent)
                     },
                     modifier = Modifier
@@ -158,6 +178,7 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
         }
     }
 }
+
 
 @Composable
 fun DetailItem(title: String, value: String) {

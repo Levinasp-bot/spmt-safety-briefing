@@ -1,62 +1,169 @@
 package com.example.spmtsafetybriefingapp
-
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import org.json.JSONObject
+import java.io.IOException
+import java.io.InputStream
+import com.google.auth.oauth2.GoogleCredentials
 
 class PendingApprovalActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            PendingApprovalScreen()
+            PendingApprovalScreen(this)
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PendingApprovalScreen() {
-    val context = LocalContext.current
+fun PendingApprovalScreen(context: Context) {
+    val localContext = LocalContext.current
     var pendingUsers by remember { mutableStateOf<List<DocumentSnapshot>>(emptyList()) }
 
     LaunchedEffect(Unit) {
-        getPendingUsers { users ->
-            pendingUsers = users
-        }
+        getPendingUsers { users -> pendingUsers = users }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text(text = "Daftar User Menunggu Persetujuan", style = MaterialTheme.typography.titleLarge)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Daftar Pengguna Menunggu Persetujuan",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { (context as? Activity)?.finish() }) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Kembali",
+                            tint = Color.Black
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+        ) {
+            LazyColumn {
+                items(pendingUsers) { user ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = CardDefaults.cardElevation(4.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = user.getString("name") ?: "Unknown",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = user.getString("role") ?: "Unknown",
+                                    fontSize = 14.sp,
+                                    color = Color.Gray
+                                )
+                            }
 
-        LazyColumn {
-            items(pendingUsers) { user ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(8.dp),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(text = "Nama: ${user.getString("name")}")
-                        Text(text = "Jabatan: ${user.getString("role")}")
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(onClick = { approveUser(context, user.id) }) {
-                            Text("Setujui")
+                            Row {
+                                IconButton(
+                                    onClick = { approveUser(localContext, user.id) }, // ✅ Kirim context & userId
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(Color(0xFF4CAF50), shape = CircleShape)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Setujui",
+                                        tint = Color.White
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                IconButton(
+                                    onClick = { deleteUser(localContext, user.id) }, // ✅ Kirim context & userId
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(Color(0xFFE53935), shape = CircleShape)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Tolak",
+                                        tint = Color.White
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     }
+}
+
+
+fun deleteUser(context: Context, userId: String) {
+    val db = FirebaseFirestore.getInstance()
+    db.collection("users").document(userId)
+        .delete()
+        .addOnSuccessListener {
+            Toast.makeText(context, "User dihapus!", Toast.LENGTH_SHORT).show()
+        }
+        .addOnFailureListener { e ->
+            Toast.makeText(context, "Gagal menghapus: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
 }
 
 fun getPendingUsers(onResult: (List<DocumentSnapshot>) -> Unit) {
@@ -68,11 +175,69 @@ fun getPendingUsers(onResult: (List<DocumentSnapshot>) -> Unit) {
         }
 }
 
-fun approveUser(context: android.content.Context, userId: String) {
-    FirebaseFirestore.getInstance().collection("users")
-        .document(userId)
-        .update("isApproved", true) // Mengubah status menjadi disetujui
-        .addOnSuccessListener {
-            Toast.makeText(context, "User disetujui!", Toast.LENGTH_SHORT).show()
+fun approveUser(context: Context, userId: String) {
+    val db = FirebaseFirestore.getInstance()
+    val userRef = db.collection("users").document(userId)
+
+    userRef.get().addOnSuccessListener { document ->
+        if (document.exists()) {
+            val fcmToken = document.getString("fcmToken")
+
+            userRef.update("isApproved", true)
+                .addOnSuccessListener {
+                    Toast.makeText(context, "User disetujui!", Toast.LENGTH_SHORT).show()
+
+                    if (!fcmToken.isNullOrEmpty()) {
+                        sendFCMNotification(context, fcmToken, "Judul Notif", "Isi Notif")
+                    }
+                }
         }
+    }
 }
+
+fun getServiceAccountJson(context: Context): InputStream? {
+    return context.resources.openRawResource(R.raw.service_account)
+}
+
+fun getAccessToken(context: Context): String? {
+    val inputStream = getServiceAccountJson(context)
+    val googleCredentials = GoogleCredentials.fromStream(inputStream)
+        .createScoped(listOf("https://www.googleapis.com/auth/firebase.messaging"))
+    googleCredentials.refreshIfExpired()
+    return googleCredentials.accessToken.tokenValue
+}
+
+fun sendFCMNotification(context: Context, token: String, title: String, message: String) {
+    val accessToken = getAccessToken(context) ?: return
+
+    val json = JSONObject().apply {
+        put("message", JSONObject().apply {
+            put("token", token)
+            put("notification", JSONObject().apply {
+                put("title", title)
+                put("body", message)
+            })
+        })
+    }
+
+    val body = RequestBody.create("application/json".toMediaTypeOrNull(), json.toString())
+    val request = Request.Builder()
+        .url("https://fcm.googleapis.com/v1/projects/YOUR_PROJECT_ID/messages:send")
+        .addHeader("Authorization", "Bearer $accessToken")
+        .addHeader("Content-Type", "application/json")
+        .post(body)
+        .build()
+
+    val client = OkHttpClient()
+    client.newCall(request).enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            e.printStackTrace()
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            println("Response: ${response.body?.string()}")
+        }
+    })
+}
+
+

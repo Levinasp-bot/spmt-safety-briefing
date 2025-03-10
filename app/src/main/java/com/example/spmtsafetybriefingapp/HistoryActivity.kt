@@ -1,5 +1,6 @@
 package com.example.spmtsafetybriefingapp
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -27,8 +28,10 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -49,6 +52,8 @@ fun HistoryScreen(navController: NavController) {
     val context = LocalContext.current
     val agendaList = remember { mutableStateListOf<Agenda>() }
     val firestore = FirebaseFirestore.getInstance()
+    val scaffoldState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
 
     firestore.collection("agenda")
         .whereEqualTo("status", "selesai")
@@ -74,72 +79,83 @@ fun HistoryScreen(navController: NavController) {
                 agendaList.add(agenda)
             }
         }
-
-    Scaffold(
-        bottomBar = { BottomNavigationBar(navController) }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Riwayat",
-                        fontSize = 20.sp
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { /* Handle menu click */ }) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu")
+    ModalNavigationDrawer(
+        drawerState = scaffoldState,
+        drawerContent = {
+            DrawerContent(onCloseDrawer = { coroutineScope.launch { scaffoldState.close() } })
+        }
+    ) {
+        Scaffold(
+            bottomBar = { BottomNavigationBar(navController) }
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "Riwayat",
+                            fontSize = 20.sp
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { coroutineScope.launch { scaffoldState.open() } }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.menu),
+                                contentDescription = "Menu",
+                                tint = Color.Black
+                            )
+                        }
                     }
-                }
-            )
-
-            // 🔹 Daftar Riwayat
-            if (agendaList.isEmpty()) {
-                Text(
-                    text = "Belum ada data absensi",
-                    fontSize = 14.sp,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(16.dp)
                 )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    itemsIndexed(agendaList) { index, agenda ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .clickable {
-                                    val intent = Intent(context, DetailSafetyBriefingActivity::class.java)
-                                    intent.putExtra("briefingId", agenda.briefingId)
-                                    context.startActivity(intent)
+
+                // 🔹 Daftar Riwayat
+                if (agendaList.isEmpty()) {
+                    Text(
+                        text = "Belum ada data absensi",
+                        fontSize = 14.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        itemsIndexed(agendaList) { index, agenda ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .clickable {
+                                        val intent = Intent(context, DetailSafetyBriefingActivity::class.java).apply {
+                                            putExtra("briefingId", agenda.briefingId)
+                                        }
+                                        context.startActivity(intent)
+                                    }
+                                    .border(1.dp, Color(0xFF0E73A7), shape = RoundedCornerShape(8.dp)), // 🔹 Stroke biru
+                                shape = RoundedCornerShape(8.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White) // 🔹 Warna putih
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "Safety Briefing ${agenda.terminal}",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = agenda.timestamp?.toDate()?.let { formatTimestamp(it) } ?: "Unknown",
+                                        fontSize = 14.sp,
+                                        color = Color.Gray
+                                    )
+                                    Text(
+                                        text = agenda.shift,
+                                        fontSize = 14.sp,
+                                        color = Color.Gray
+                                    )
                                 }
-                                .border(1.dp, Color(0xFF0E73A7), shape = RoundedCornerShape(8.dp)), // 🔹 Stroke biru
-                            shape = RoundedCornerShape(8.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White) // 🔹 Warna putih
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(
-                                    text = "Safety Briefing ${agenda.terminal}",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = agenda.timestamp?.toDate()?.let { formatTimestamp(it) } ?: "Unknown",
-                                    fontSize = 14.sp,
-                                    color = Color.Gray
-                                )
-                                Text(
-                                    text = "${agenda.shift}",
-                                    fontSize = 14.sp,
-                                    color = Color.Gray
-                                )
                             }
                         }
                     }
@@ -149,7 +165,40 @@ fun HistoryScreen(navController: NavController) {
     }
 }
 
+@Composable
+fun DrawerContent(onCloseDrawer: () -> Unit) {
+    val context = LocalContext.current
+    val auth = FirebaseAuth.getInstance()
 
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.Top
+    ) {
+        // Logout button
+        Text(
+            text = "Logout",
+            fontSize = 16.sp,
+            color = Color.Red,
+            modifier = Modifier.clickable {
+                auth.signOut()
+                onCloseDrawer()
+
+                val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                sharedPreferences.edit().putBoolean("is_logged_in", false).apply()
+
+                val intent = Intent(context, LoginRegisterActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                context.startActivity(intent)
+
+                if (context is HomeActivity) {
+                    context.finish()
+                }
+            }
+        )
+    }
+}
 fun formatTimestamp(date: Date): String {
     val format = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
     return format.format(date)

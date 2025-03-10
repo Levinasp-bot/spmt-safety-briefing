@@ -47,6 +47,7 @@ android {
 
     packaging {
         resources.excludes += listOf("META-INF/DEPENDENCIES")
+        resources.excludes += "META-INF/INDEX.LIST"
     }
 }
 
@@ -95,4 +96,8 @@ dependencies {
     implementation("com.google.accompanist:accompanist-swiperefresh:0.27.0")
     implementation("com.itextpdf:itext7-core:7.2.3")
     implementation("io.ktor:ktor-client-android:2.0.0")
+    implementation("com.google.firebase:firebase-messaging:23.1.0")
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("com.google.auth:google-auth-library-oauth2-http:1.21.0")
 }

@@ -311,7 +311,7 @@ class HomeActivity : ComponentActivity() {
                         Spacer(modifier = Modifier.height(16.dp))
 
                         val allowedRoles = setOf(
-                            "Brach Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
+                            "Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
                             "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE",
                             "Koordinator Lapangan Pengamanan", "Komandan Peleton", "Chief Foreman"
                         )
@@ -1151,13 +1151,6 @@ class HomeActivity : ComponentActivity() {
                 .padding(16.dp),
             verticalArrangement = Arrangement.Top
         ) {
-            Text(text = "Menu", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(text = "Beranda", fontSize = 16.sp, modifier = Modifier.clickable { onCloseDrawer() })
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = "Riwayat", fontSize = 16.sp, modifier = Modifier.clickable { onCloseDrawer() })
-            Spacer(modifier = Modifier.height(8.dp))
-
             // Logout button
             Text(
                 text = "Logout",

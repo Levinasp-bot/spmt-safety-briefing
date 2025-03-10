@@ -12,15 +12,21 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -32,21 +38,16 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import okhttp3.Call
 import okhttp3.Callback
-import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
-import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.Response
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
-import java.util.*
 
 class FormSafetyBriefingActivity : ComponentActivity() {
     private val firestore = FirebaseFirestore.getInstance()
@@ -79,17 +80,20 @@ class FormSafetyBriefingActivity : ComponentActivity() {
         val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
             imageBitmap = bitmap
         }
+
         var terminal by remember { mutableStateOf("") }
         var shift by remember { mutableStateOf("") }
         var koordinator by remember { mutableStateOf("") }
         var groupSecurity by remember { mutableStateOf("") }
         var groupOperational by remember { mutableStateOf("") }
         var agendaList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
-        var imageUri by remember { mutableStateOf<Uri?>(null) }
+        var sakitList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
+        var cutiList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
+        var izinList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
+        var tanpaketList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
         var isLoading by remember { mutableStateOf(false) }
 
         val context = LocalContext.current
-
         val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
             uri?.let {
                 try {
@@ -138,13 +142,95 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 }
             }
 
-            imageUri?.let {
+            sakitList.forEachIndexed { index, textFieldValue ->
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = textFieldValue,
+                        onValueChange = { newValue ->
+                            sakitList = sakitList.toMutableList().apply { this[index] = newValue }
+                        },
+                        label = { Text("Nama Pekerja Sakit ${index + 1}") },
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    )
+                    if (index == agendaList.size - 1) {
+                        IconButton(onClick = { agendaList = agendaList + TextFieldValue("") }) {
+                            Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah Agenda")
+                        }
+                    }
+                }
+            }
+
+            cutiList.forEachIndexed { index, textFieldValue ->
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = textFieldValue,
+                        onValueChange = { newValue ->
+                            cutiList = cutiList.toMutableList().apply { this[index] = newValue }
+                        },
+                        label = { Text("Nama Pekerja Cuti ${index + 1}") },
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    )
+                    if (index == cutiList.size - 1) {
+                        IconButton(onClick = { cutiList = cutiList + TextFieldValue("") }) {
+                            Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah Agenda")
+                        }
+                    }
+                }
+            }
+
+            izinList.forEachIndexed { index, textFieldValue ->
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = textFieldValue,
+                        onValueChange = { newValue ->
+                            izinList = izinList.toMutableList().apply { this[index] = newValue }
+                        },
+                        label = { Text("Nama Pekerja Izin ${index + 1}") },
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    )
+                    if (index == izinList.size - 1) {
+                        IconButton(onClick = { izinList = izinList + TextFieldValue("") }) {
+                            Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah Agenda")
+                        }
+                    }
+                }
+            }
+
+            tanpaketList.forEachIndexed { index, textFieldValue ->
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = textFieldValue,
+                        onValueChange = { newValue ->
+                            tanpaketList = tanpaketList.toMutableList().apply { this[index] = newValue }
+                        },
+                        label = { Text("Nama Pekerja Tanpa Keterangan ${index + 1}") },
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    )
+                    if (index == tanpaketList.size - 1) {
+                        IconButton(onClick = { tanpaketList = tanpaketList + TextFieldValue("") }) {
+                            Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah Agenda")
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            imageBitmap?.let { bitmap ->
                 Image(
-                    painter = rememberImagePainter(it),
+                    painter = remember { BitmapPainter(bitmap.asImageBitmap()) },
                     contentDescription = "Dokumentasi",
-                    modifier = Modifier.fillMaxWidth().height(200.dp).padding(top = 8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
+                        .background(Color.LightGray)
+                        .padding(8.dp)
                 )
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 Button(onClick = { cameraLauncher.launch(null) }) {
@@ -156,9 +242,12 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
             if (isLoading) {
                 CircularProgressIndicator()
             }
+
+            // 🔹 **Tombol Simpan Data**
             Button(
                 onClick = {
                     val data = mapOf(
@@ -168,6 +257,10 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                         "groupSecurity" to groupSecurity,
                         "groupOperational" to groupOperational,
                         "agenda" to agendaList.map { it.text },
+                        "sakit" to sakitList.map { it.text },
+                        "izin" to izinList.map { it.text },
+                        "cuti" to cutiList.map { it.text },
+                        "tanpaKeterangan" to tanpaketList.map { it.text },
                         "timestamp" to System.currentTimeMillis()
                     )
                     onSaveData(data, imageBitmap)
@@ -228,8 +321,6 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             }
         })
     }
-
-
 
     private fun saveToFirestore(data: MutableMap<String, Any>) {
         val documentRef = firestore.collection("agenda").document()
