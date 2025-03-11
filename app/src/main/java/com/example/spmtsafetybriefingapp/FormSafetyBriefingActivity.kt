@@ -17,6 +17,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -119,7 +121,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             )
 
             DropdownMenuInput("Terminal", terminal, { terminal = it }, listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah"))
-            DropdownMenuInput("Shift", shift, { shift = it }, listOf("Shift 1 00:00 - 08:00", "Shift 2 08:00 - 16:00", "Shift 3 16:00 - 00:00"))
+            DropdownMenuInput("Shift", shift, { shift = it }, listOf("Shift 1 08:00 - 16:00", "Shift 2 16:00 - 00:00", "Shift 3 00:00 - 08:00"))
             DropdownMenuInput("Koordinator", koordinator, { koordinator = it }, listOf("John Doe", "Jane Doe"))
             DropdownMenuInput("Group Security", groupSecurity, { groupSecurity = it }, listOf("Group A", "Group B", "Group C", "Group D"))
             DropdownMenuInput("Group Operational", groupOperational, { groupOperational = it }, listOf("Group A", "Group B", "Group C", "Group D"))
@@ -233,10 +235,24 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Button(onClick = { cameraLauncher.launch(null) }) {
+                Button(onClick = { cameraLauncher.launch(null) },
+                    modifier = Modifier
+                        .fillMaxWidth(0.34f)
+                        .height(40.dp)
+                        .testTag("ambil_foto"),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
+                    shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
+                ) {
                     Text("Ambil Foto")
                 }
-                Button(onClick = { galleryLauncher.launch("image/*") }) {
+                Button(onClick = { galleryLauncher.launch("image/*") },
+                    modifier = Modifier
+                        .fillMaxWidth(0.64f)
+                        .height(40.dp)
+                        .testTag("pilih_foto"),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
+                    shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
+                ){
                     Text("Pilih dari Galeri")
                 }
             }
@@ -247,24 +263,33 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 CircularProgressIndicator()
             }
 
-            // 🔹 **Tombol Simpan Data**
             Button(
                 onClick = {
-                    val data = mapOf(
-                        "terminal" to terminal,
-                        "shift" to shift,
-                        "koordinator" to koordinator,
-                        "groupSecurity" to groupSecurity,
-                        "groupOperational" to groupOperational,
-                        "agenda" to agendaList.map { it.text },
-                        "sakit" to sakitList.map { it.text },
-                        "izin" to izinList.map { it.text },
-                        "cuti" to cutiList.map { it.text },
-                        "tanpaKeterangan" to tanpaketList.map { it.text },
-                        "timestamp" to System.currentTimeMillis()
-                    )
-                    onSaveData(data, imageBitmap)
-                }
+                    if (imageBitmap == null) {
+                        Toast.makeText(context, "Foto dokumentasi kosong", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val data = mapOf(
+                            "terminal" to terminal,
+                            "shift" to shift,
+                            "koordinator" to koordinator,
+                            "groupSecurity" to groupSecurity,
+                            "groupOperational" to groupOperational,
+                            "agenda" to agendaList.map { it.text },
+                            "sakit" to sakitList.map { it.text },
+                            "izin" to izinList.map { it.text },
+                            "cuti" to cutiList.map { it.text },
+                            "tanpaKeterangan" to tanpaketList.map { it.text },
+                            "timestamp" to System.currentTimeMillis()
+                        )
+                        onSaveData(data, imageBitmap)
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .testTag("simpan_data"),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
+                shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
             ) {
                 Text("Simpan Data")
             }

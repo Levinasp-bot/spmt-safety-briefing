@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,11 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 
 class LoginActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
@@ -48,7 +52,6 @@ class LoginActivity : ComponentActivity() {
         val db = FirebaseFirestore.getInstance()
         val auth = FirebaseAuth.getInstance()
 
-        // 🔹 Cari pengguna berdasarkan NIPP
         db.collection("users").whereEqualTo("noEmployee", nipp).limit(1).get()
             .addOnSuccessListener { documents ->
                 if (!documents.isEmpty) {
@@ -56,12 +59,10 @@ class LoginActivity : ComponentActivity() {
                     val email = userDoc.getString("email") ?: ""
 
                     if (email.isNotBlank()) {
-                        // 🔹 Gunakan email yang ditemukan untuk login
                         auth.signInWithEmailAndPassword(email, password)
                             .addOnSuccessListener { authResult ->
                                 val userId = authResult.user?.uid ?: return@addOnSuccessListener
 
-                                // 🔹 Periksa status persetujuan akun
                                 db.collection("users").document(userId).get()
                                     .addOnSuccessListener { document ->
                                         if (document.exists()) {
@@ -142,16 +143,27 @@ fun LoginScreen(onLoginClick: (String, String) -> Unit, onRegisterClick: () -> U
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        var passwordVisible by remember { mutableStateOf(false) }
+
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
             label = { Text("Password", color = primaryColor) },
-            visualTransformation = PasswordVisualTransformation(),
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
             colors = TextFieldDefaults.outlinedTextFieldColors(
                 focusedBorderColor = primaryColor,
                 unfocusedBorderColor = primaryColor
-            )
+            ),
+            trailingIcon = {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                        tint = primaryColor
+                    )
+                }
+            }
         )
 
         Spacer(modifier = Modifier.height(16.dp))

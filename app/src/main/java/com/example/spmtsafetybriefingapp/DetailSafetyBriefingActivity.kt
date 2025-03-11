@@ -59,7 +59,6 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
     var listenerRegistration by remember { mutableStateOf<ListenerRegistration?>(null) }
 
     DisposableEffect(briefingId) {
-        // Listen for agenda document changes
         listenerRegistration = firestore.collection("agenda").document(briefingId)
             .addSnapshotListener { document, error ->
                 if (error != null) {

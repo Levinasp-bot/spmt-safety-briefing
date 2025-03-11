@@ -64,14 +64,21 @@ fun HistoryScreen(navController: NavController) {
                 return@addSnapshotListener
             }
 
+            // Bersihkan daftar sebelum menambahkan data baru
             agendaList.clear()
+
             Log.d("Firestore", "Total agenda ditemukan: ${snapshot?.documents?.size}")
 
             snapshot?.documents?.forEach { doc ->
                 val briefingId = doc.id
                 val terminal = doc.getString("terminal") ?: "Tidak diketahui"
                 val shift = doc.getString("shift") ?: "Tidak diketahui"
-                val timestamp = doc.getTimestamp("timestamp")
+
+                val timestamp: Timestamp? = if (doc.contains("timestamp") && doc.get("timestamp") is Timestamp) {
+                    doc.getTimestamp("timestamp")
+                } else {
+                    null
+                }
 
                 Log.d("Firestore", "Agenda ditemukan -> ID: $briefingId, Terminal: $terminal, Shift: $shift, Timestamp: $timestamp")
 
@@ -79,6 +86,7 @@ fun HistoryScreen(navController: NavController) {
                 agendaList.add(agenda)
             }
         }
+
     ModalNavigationDrawer(
         drawerState = scaffoldState,
         drawerContent = {

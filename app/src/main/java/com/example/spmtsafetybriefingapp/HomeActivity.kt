@@ -2,6 +2,7 @@ package com.example.spmtsafetybriefingapp
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ContentValues
 import android.content.Context
 import android.provider.MediaStore
 import android.content.Intent
@@ -10,6 +11,7 @@ import android.graphics.Bitmap
 import android.location.Location
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -50,6 +52,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceDetection
@@ -61,18 +64,30 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.sqrt
 
 class HomeActivity : ComponentActivity() {
-    private var interpreter: Interpreter? = null
+    private lateinit var firestore: FirebaseFirestore
     private lateinit var auth: FirebaseAuth
-    private val firestore = FirebaseFirestore.getInstance()
+    private var interpreter: Interpreter? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        firestore = FirebaseFirestore.getInstance()
         auth = FirebaseAuth.getInstance()
 
+        try {
+            val tfliteModel = loadModelFile()
+            interpreter = Interpreter(tfliteModel)
+            Log.d("TFLite", "Model berhasil dimuat.")
+        } catch (e: Exception) {
+            Log.e("TFLite", "Gagal memuat model", e)
+            Toast.makeText(this, "Gagal memuat model", Toast.LENGTH_LONG).show()
+            finish()
+        }
         setContent {
             var userName by remember { mutableStateOf("") }
             var userRole by remember { mutableStateOf("") }
@@ -159,30 +174,34 @@ class HomeActivity : ComponentActivity() {
                         val userGroup = userDoc.getString("group") ?: ""
 
                         val allowedRoles = listOf(
-                            "Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
+                            "Brach Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
                             "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE",
-                            "Koordinator Lapangan Pengamanan"
+                            "Koordinator Lapangan Pengamanan", "Komandan Peleton", "Chief Foreman"
                         )
-                        val operationalRoles = listOf("Foreman", "Dispatcher", "Chief Foreman")
+                        val operationalRoles = listOf("Foreman", "Dispatcher")
                         val securityRoles = listOf("Anggota Pengamanan", "Komandan Peleton")
+                        var agendaQuery: Query? = null
+                        when {
+                            userRole in allowedRoles || userRole in securityRoles || userRole in operationalRoles -> {
+                                agendaQuery = firestore.collection("agenda").whereEqualTo("status", "aktif")
+                                Log.d("Firestore", "Fetching active agendas for role: $userRole")
 
-                        val agendaQuery = when {
-                            userRole in allowedRoles -> {
-                                var query = firestore.collection("agenda").whereEqualTo("status", "aktif")
                                 when {
                                     userRole in securityRoles -> {
-                                        query = query.whereEqualTo("terminal", userTerminal)
+                                        agendaQuery = agendaQuery.whereEqualTo("terminal", userTerminal)
                                             .whereEqualTo("groupSecurity", userGroup)
+                                        Log.d("Firestore", "Security Role Filter Applied -> Terminal: $userTerminal, GroupSecurity: $userGroup")
                                     }
                                     userRole in operationalRoles -> {
-                                        query = query.whereEqualTo("terminal", userTerminal)
+                                        agendaQuery = agendaQuery.whereEqualTo("terminal", userTerminal)
                                             .whereEqualTo("groupOperational", userGroup)
+                                        Log.d("Firestore", "Operational Role Filter Applied -> Terminal: $userTerminal, GroupOperational: $userGroup")
                                     }
                                 }
-                                query
                             }
-                            else -> null
+                            else -> Log.d("Firestore", "User role $userRole is not allowed to fetch agendas.")
                         }
+
 
                         if (agendaQuery != null) {
                             val agendaSnapshot = agendaQuery.get().await()
@@ -201,6 +220,7 @@ class HomeActivity : ComponentActivity() {
             }
         }
 
+        // Panggil fetchActiveAgenda() saat pertama kali dibuka
         LaunchedEffect(Unit) {
             fetchActiveAgenda()
         }
@@ -604,13 +624,43 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
+    fun fetchShiftFromAgenda(agendaId: String, onResult: (String?) -> Unit) {
+        val db = FirebaseFirestore.getInstance()
+        db.collection("agenda").document(agendaId).get()
+            .addOnSuccessListener { document ->
+                if (document.exists()) {
+                    val shift = document.getString("shift") // Pastikan Firestore memiliki field "shift"
+                    onResult(shift)
+                } else {
+                    onResult(null)
+                }
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
+    }
+
+    fun isAttendanceAllowed(shift: String): Boolean {
+        val currentTime = Calendar.getInstance(TimeZone.getTimeZone("Asia/Jakarta"))
+        val hour = currentTime.get(Calendar.HOUR_OF_DAY)
+        val minute = currentTime.get(Calendar.MINUTE)
+
+        val timeNow = hour * 60 + minute // Konversi ke menit untuk perbandingan mudah
+
+        return when (shift) {
+            "Shift 1 08:00 - 16:00" -> timeNow in (7 * 60 + 30)..(7 * 60 + 50) // 23:00 - 00:00 WIB
+            "Shift 2 16:00 - 00:00" -> timeNow in (15 * 60 + 30)..(19 * 60 + 50)  // 07:00 - 08:00 WIB
+            "Shift 3 00:00 - 08:00" -> timeNow in (23 * 60 + 30)..(23 * 60 + 50) // 15:00 - 16:00 WIB
+            else -> false
+        }
+    }
+
     @Composable
     fun SafetyBriefingCard(agenda: Map<String, Any>) {
         val context = LocalContext.current
         val firestore = FirebaseFirestore.getInstance()
         val auth = FirebaseAuth.getInstance()
-        var userRole by remember { mutableStateOf("operator") } // Default "operator"
-
+        var userRole by remember { mutableStateOf("operator") }
         val terminal = agenda["terminal"] as? String ?: "Tidak diketahui"
         val shift = agenda["shift"] as? String ?: "Tidak diketahui"
         val time = (agenda["timestamp"] as? Timestamp)?.toDate()?.let { date ->
@@ -700,7 +750,6 @@ class HomeActivity : ComponentActivity() {
             }
         }
 
-
         LaunchedEffect(userId) {
             if (userId.isNotEmpty()) {
                 val userDoc = firestore.collection("users").document(userId).get().await()
@@ -708,41 +757,36 @@ class HomeActivity : ComponentActivity() {
             }
         }
 
-        val takePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-            if (success) {
-                photoUri.value?.let { uri ->
-                    val bitmap = MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
-                    detectFace(bitmap) { croppedFace ->
-                        if (croppedFace != null) {
-                            val embedding = getFaceEmbedding(croppedFace) // Ambil face embedding
-                            val embeddingList = embedding?.toList() ?: emptyList() // Konversi ke List<Float>
+        val takePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+            if (bitmap != null) {
+                detectFace(bitmap) { croppedFace ->
+                    if (croppedFace != null) {
+                        val newUri = saveBitmapToMediaStore(context, croppedFace)
+                        imageUri = newUri
 
-                            val newUri = Uri.parse(MediaStore.Images.Media.insertImage(
-                                context.contentResolver, croppedFace, "profile_photo", null
-                            ))
-                            imageUri = newUri
+                        val embedding = getFaceEmbedding(croppedFace)
+                        val embeddingList = embedding?.toList() ?: emptyList()
 
-                            if (userId.isNotEmpty()) {
-                                val attendanceRef = firestore.collection("agenda").document(briefingId)
-                                    .collection("attendance").document() // Buat dokumen baru
+                        if (userId.isNotEmpty()) {
+                            val attendanceRef = firestore.collection("agenda").document(briefingId)
+                                .collection("attendance").document()
 
-                                val attendanceData = mapOf(
-                                    "userId" to userId,
-                                    "userName" to userName,
-                                    "timestamp" to FieldValue.serverTimestamp(),
-                                    "photoUri" to newUri.toString(),
-                                    "faceEmbedding" to embeddingList
-                                )
+                            val attendanceData = mapOf(
+                                "userId" to userId,
+                                "userName" to userName,
+                                "timestamp" to FieldValue.serverTimestamp(),
+                                "photoUri" to newUri.toString(),
+                                "faceEmbedding" to embeddingList
+                            )
 
-                                attendanceRef.set(attendanceData)
-                                    .addOnSuccessListener {
-                                        Log.d("Firestore", "Data absensi berhasil disimpan")
-                                        compareFaceEmbeddings(userId, briefingId, attendanceRef.id, context)
-                                    }
-                            }
-                        } else {
-                            Toast.makeText(context, "Wajah tidak terdeteksi!", Toast.LENGTH_SHORT).show()
+                            attendanceRef.set(attendanceData)
+                                .addOnSuccessListener {
+                                    Log.d("Firestore", "Data absensi berhasil disimpan")
+                                    compareFaceEmbeddings(userId, briefingId, attendanceRef.id, context)
+                                }
                         }
+                    } else {
+                        Toast.makeText(context, "Wajah tidak terdeteksi!", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -784,6 +828,7 @@ class HomeActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 var showInvalidLocation by remember { mutableStateOf(false) }
+                var showInvalidTime by remember { mutableStateOf(false) }
 
                 var hasAttended by remember { mutableStateOf(false) }
 
@@ -814,32 +859,55 @@ class HomeActivity : ComponentActivity() {
                     }
                 }
 
-                if (userRole !in listOf("Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi", "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE")) { // Hanya menampilkan button untuk role tertentu
+                var selectedShift by remember { mutableStateOf<String?>(null) }
+                val agendaId = agenda["id"]?.toString() ?: ""
+
+                LaunchedEffect(agendaId) {
+                    if (agendaId != null) {
+                        fetchShiftFromAgenda(agendaId) { shift ->
+                            selectedShift = shift
+                        }
+                    }
+                }
+
+                if (userRole !in listOf(
+                        "Branch Manager",
+                        "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
+                        "Manager Operasi Jamrud",
+                        "Manager Operasi Nilam Mirah",
+                        "HSSE"
+                    )) {
                     Button(
                         onClick = {
                             if (!hasAttended) {
                                 Log.d("AbsensiButton", "Button Absensi ditekan")
 
-                                fetchUserLocation(context, fusedLocationClient) { location ->
-                                    if (location != null) {
-                                        validateLocation(firestore, location) { isValid ->
-                                            Log.d("AbsensiButton", "Status lokasi valid: $isValid")
+                                // **Cek apakah absensi diperbolehkan berdasarkan shift**
+                                if (selectedShift != null && isAttendanceAllowed(selectedShift!!)) {
+                                    fetchUserLocation(context, fusedLocationClient) { location ->
+                                        if (location != null) {
+                                            validateLocation(firestore, location) { isValid ->
+                                                Log.d("AbsensiButton", "Status lokasi valid: $isValid")
 
-                                            if (isValid) {
-                                                val file = File(context.getExternalFilesDir(null), "photo.jpg")
-                                                val uri = FileProvider.getUriForFile(context, "com.example.spmtsafetybriefingapp.fileprovider", file)
-                                                photoUri.value = uri
-                                                takePictureLauncher.launch(uri)
-                                                showInvalidLocation = false
-                                            } else {
-                                                Log.d("GeoFence", "Lokasi tidak valid, tidak bisa melakukan absensi.")
-                                                showInvalidLocation = true
+                                                if (isValid) {
+                                                    val file = File(context.getExternalFilesDir(null), "photo.jpg")
+                                                    val uri = FileProvider.getUriForFile(context, "com.example.spmtsafetybriefingapp.fileprovider", file)
+                                                    photoUri.value = uri
+                                                    takePictureLauncher.launch(null)
+                                                    showInvalidLocation = false
+                                                } else {
+                                                    Log.d("GeoFence", "Lokasi tidak valid, tidak bisa melakukan absensi.")
+                                                    showInvalidLocation = true
+                                                }
                                             }
+                                        } else {
+                                            Log.e("AbsensiButton", "Gagal mendapatkan lokasi pengguna.")
+                                            showInvalidLocation = true
                                         }
-                                    } else {
-                                        Log.e("AbsensiButton", "Gagal mendapatkan lokasi pengguna.")
-                                        showInvalidLocation = true
                                     }
+                                } else {
+                                    Log.e("AbsensiButton", "Waktu absensi tidak sesuai dengan shift atau shift tidak ditemukan.")
+                                    showInvalidTime = true
                                 }
                             }
                         },
@@ -856,6 +924,7 @@ class HomeActivity : ComponentActivity() {
                     }
                 }
 
+// **Snackbar untuk Kesalahan Lokasi**
                 if (showInvalidLocation) {
                     Snackbar(
                         modifier = Modifier.padding(16.dp),
@@ -866,6 +935,19 @@ class HomeActivity : ComponentActivity() {
                         }
                     ) {
                         Text("Waktu dan Lokasi tidak sesuai!", color = Color.White)
+                    }
+                }
+
+                if (showInvalidTime) {
+                    Snackbar(
+                        modifier = Modifier.padding(16.dp),
+                        action = {
+                            TextButton(onClick = { showInvalidTime = false }) {
+                                Text("Tutup", color = Color.White)
+                            }
+                        }
+                    ) {
+                        Text("Waktu absensi tidak sesuai dengan shift!", color = Color.White)
                     }
                 }
 
@@ -925,6 +1007,7 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
+
     fun calculateCosineSimilarity(embedding1: List<Double>, embedding2: List<Double>): Double {
         val dotProduct = embedding1.zip(embedding2).sumOf { it.first * it.second }
         val magnitude1 = sqrt(embedding1.sumOf { it * it })
@@ -952,7 +1035,7 @@ class HomeActivity : ComponentActivity() {
                                 // Log nilai akurasi kecocokan wajah
                                 Log.d("FaceRecognition", "Akurasi wajah: ${similarity * 100}%")
 
-                                if (similarity >= 0.4) {
+                                if (similarity >= 0.3) {
                                     Toast.makeText(context, "Absensi berhasil! Akurasi: ${(similarity * 100).toInt()}%", Toast.LENGTH_SHORT).show()
 
                                     // Arahkan ke halaman AbsensiResultActivity dengan briefingId
@@ -1151,6 +1234,13 @@ class HomeActivity : ComponentActivity() {
                 .padding(16.dp),
             verticalArrangement = Arrangement.Top
         ) {
+            Text(text = "Menu", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(text = "Beranda", fontSize = 16.sp, modifier = Modifier.clickable { onCloseDrawer() })
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = "Riwayat", fontSize = 16.sp, modifier = Modifier.clickable { onCloseDrawer() })
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Logout button
             Text(
                 text = "Logout",
@@ -1242,6 +1332,25 @@ class HomeActivity : ComponentActivity() {
             )
         }
     }
-}
+    private fun saveBitmapToMediaStore(context: Context, bitmap: Bitmap): Uri? {
+        val filename = "profile_photo_${System.currentTimeMillis()}.jpg"
+        val contentValues = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/SafetyBriefing")
+        }
+
+        val contentResolver = context.contentResolver
+        val imageUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+        imageUri?.let {
+            contentResolver.openOutputStream(it)?.use { outputStream ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+            }
+        }
+
+        return imageUri
+    }
+    }
 
 
