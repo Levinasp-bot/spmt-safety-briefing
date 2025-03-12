@@ -86,7 +86,8 @@ class RegisterActivity : ComponentActivity() {
         val terminalOptions = listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah")
         var terminal by remember { mutableStateOf(terminalOptions.first()) }
 
-        val roleOptions = listOf("Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi", "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE", "Koordinator Lapangan Pengamanan", "Komandan Peleton", "Anggota Pengamanan", "Chief Foreman", "Foreman", "Dispatcher")
+        val roleOptions = listOf("Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi", "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE", "Koordinator Lapangan Pengamanan",
+            "Komandan Peleton", "Anggota Pengamanan", "Chief Foreman", "Foreman", "Dispatcher", "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah")
         var role by remember { mutableStateOf(roleOptions.first()) }
 
         val groupOptions = listOf("Group A", "Group B", "Group C", "Group D")
@@ -219,15 +220,25 @@ class RegisterActivity : ComponentActivity() {
                 onClick = {
                     isLoading = true
                     val selectedGroup = if (showGroupDropdown) group else null
-                    onRegisterClick(noEmployee, email, password, name, role, group, terminal, imageUri, faceEmbedding)
+                    onRegisterClick(
+                        noEmployee, email, password, name, role, group, terminal, imageUri, faceEmbedding
+                    )
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
-                shape = RoundedCornerShape(8.dp) // 🔹 Tambahkan rounded corner 8dp
+                shape = RoundedCornerShape(8.dp)
             ) {
-                Text(text = if (isLoading) "Mendaftar..." else "Daftar", color = Color.White)
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(text = "Daftar", color = Color.White)
+                }
             }
         }
     }

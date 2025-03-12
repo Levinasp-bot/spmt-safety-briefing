@@ -171,14 +171,16 @@ fun LoginScreen(onLoginClick: (String, String) -> Unit, onRegisterClick: () -> U
         Button(
             onClick = {
                 isLoading = true
-                onLoginClick(email, password)
+                onLoginClick(email, password) { success ->
+                    isLoading = !success // Jika gagal, isLoading kembali ke false
+                }
             },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
             enabled = !isLoading,
             colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
-            shape = RoundedCornerShape(8.dp)  // Round corner 8.dp
+            shape = RoundedCornerShape(8.dp)
         ) {
             if (isLoading) {
                 CircularProgressIndicator(

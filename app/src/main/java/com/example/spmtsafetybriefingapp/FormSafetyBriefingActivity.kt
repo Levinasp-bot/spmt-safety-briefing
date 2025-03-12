@@ -86,8 +86,8 @@ class FormSafetyBriefingActivity : ComponentActivity() {
         var terminal by remember { mutableStateOf("") }
         var shift by remember { mutableStateOf("") }
         var koordinator by remember { mutableStateOf("") }
-        var groupSecurity by remember { mutableStateOf("") }
-        var groupOperational by remember { mutableStateOf("") }
+        var group by remember { mutableStateOf("") }
+        //var groupOperational by remember { mutableStateOf("") }
         var agendaList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
         var sakitList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
         var cutiList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
@@ -122,9 +122,9 @@ class FormSafetyBriefingActivity : ComponentActivity() {
 
             DropdownMenuInput("Terminal", terminal, { terminal = it }, listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah"))
             DropdownMenuInput("Shift", shift, { shift = it }, listOf("Shift 1 08:00 - 16:00", "Shift 2 16:00 - 00:00", "Shift 3 00:00 - 08:00"))
-            DropdownMenuInput("Koordinator", koordinator, { koordinator = it }, listOf("John Doe", "Jane Doe"))
-            DropdownMenuInput("Group Security", groupSecurity, { groupSecurity = it }, listOf("Group A", "Group B", "Group C", "Group D"))
-            DropdownMenuInput("Group Operational", groupOperational, { groupOperational = it }, listOf("Group A", "Group B", "Group C", "Group D"))
+            //DropdownMenuInput("Koordinator", koordinator, { koordinator = it }, listOf("Darman", "Umar Hotob", ))
+            DropdownMenuInput("Group", group, { group = it }, listOf("Group A", "Group B", "Group C", "Group D"))
+            //DropdownMenuInput("Group Operational", groupOperational, { groupOperational = it }, listOf("Group A", "Group B", "Group C", "Group D"))
 
             agendaList.forEachIndexed { index, textFieldValue ->
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -263,27 +263,42 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 CircularProgressIndicator()
             }
 
-            Button(
-                onClick = {
-                    if (imageBitmap == null) {
-                        Toast.makeText(context, "Foto dokumentasi kosong", Toast.LENGTH_SHORT).show()
-                    } else {
-                        val data = mapOf(
-                            "terminal" to terminal,
-                            "shift" to shift,
-                            "koordinator" to koordinator,
-                            "groupSecurity" to groupSecurity,
-                            "groupOperational" to groupOperational,
-                            "agenda" to agendaList.map { it.text },
-                            "sakit" to sakitList.map { it.text },
-                            "izin" to izinList.map { it.text },
-                            "cuti" to cutiList.map { it.text },
-                            "tanpaKeterangan" to tanpaketList.map { it.text },
-                            "timestamp" to System.currentTimeMillis()
-                        )
-                        onSaveData(data, imageBitmap)
-                    }
-                },
+            var isLoading by remember { mutableStateOf(false) }
+
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Tombol untuk menyimpan data
+                Button(
+                    onClick = {
+                        if (imageBitmap == null) {
+                            Toast.makeText(context, "Foto dokumentasi kosong", Toast.LENGTH_SHORT).show()
+                        } else {
+                            // Set isLoading menjadi true untuk menunjukkan progress bar
+                            isLoading = true
+
+                            val data = mapOf(
+                                "terminal" to terminal,
+                                "shift" to shift,
+                                "koordinator" to koordinator,
+                                "group" to group,
+                                //"groupOperational" to groupOperational,
+                                "agenda" to agendaList.map { it.text },
+                                "sakit" to sakitList.map { it.text },
+                                "izin" to izinList.map { it.text },
+                                "cuti" to cutiList.map { it.text },
+                                "tanpaKeterangan" to tanpaketList.map { it.text },
+                                "timestamp" to System.currentTimeMillis()
+                            )
+
+                            // Simulasi proses penyimpanan data (seperti mengupload gambar atau data)
+                            onSaveData(data, imageBitmap)
+
+                            // Setelah data disimpan, set isLoading menjadi false
+                            isLoading = false
+                        }
+                    },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
@@ -292,6 +307,10 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
             ) {
                 Text("Simpan Data")
+            }
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                }
             }
         }
     }

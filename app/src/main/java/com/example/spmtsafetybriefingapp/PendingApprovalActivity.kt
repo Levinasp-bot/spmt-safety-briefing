@@ -36,6 +36,10 @@ import org.json.JSONObject
 import java.io.IOException
 import java.io.InputStream
 import com.google.auth.oauth2.GoogleCredentials
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+
 
 class PendingApprovalActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -118,7 +122,12 @@ fun PendingApprovalScreen(context: Context) {
 
                             Row {
                                 IconButton(
-                                    onClick = { approveUser(localContext, user.id) }, // ✅ Kirim context & userId
+                                    onClick = {
+                                        approveUser(localContext, user.id)
+                                        val intent = Intent(context, (context as Activity)::class.java)
+                                        context.startActivity(intent)
+                                        (context as Activity).finish()
+                                              }, // ✅ Kirim context & userId
                                     modifier = Modifier
                                         .size(40.dp)
                                         .background(Color(0xFF4CAF50), shape = CircleShape)
@@ -133,7 +142,12 @@ fun PendingApprovalScreen(context: Context) {
                                 Spacer(modifier = Modifier.width(8.dp))
 
                                 IconButton(
-                                    onClick = { deleteUser(localContext, user.id) }, // ✅ Kirim context & userId
+                                    onClick = {
+                                        deleteUser(localContext, user.id)
+                                        val intent = Intent(context, (context as Activity)::class.java)
+                                        context.startActivity(intent)
+                                        (context as Activity).finish()
+                                              }, // ✅ Kirim context & userId
                                     modifier = Modifier
                                         .size(40.dp)
                                         .background(Color(0xFFE53935), shape = CircleShape)
@@ -155,15 +169,26 @@ fun PendingApprovalScreen(context: Context) {
 
 
 fun deleteUser(context: Context, userId: String) {
-    val db = FirebaseFirestore.getInstance()
-    db.collection("users").document(userId)
-        .delete()
-        .addOnSuccessListener {
-            Toast.makeText(context, "User dihapus!", Toast.LENGTH_SHORT).show()
+    CoroutineScope(Dispatchers.IO).launch { // 🔄 Jalankan di background thread
+        try {
+            val db = FirebaseFirestore.getInstance()
+            db.collection("users").document(userId).delete()
+                .addOnSuccessListener {
+                    CoroutineScope(Dispatchers.Main).launch {
+                        Toast.makeText(context, "User dihapus!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .addOnFailureListener { e ->
+                    CoroutineScope(Dispatchers.Main).launch {
+                        Toast.makeText(context, "Gagal menghapus: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+        } catch (e: Exception) {
+            CoroutineScope(Dispatchers.Main).launch {
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
-        .addOnFailureListener { e ->
-            Toast.makeText(context, "Gagal menghapus: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
+    }
 }
 
 fun getPendingUsers(onResult: (List<DocumentSnapshot>) -> Unit) {
@@ -176,24 +201,23 @@ fun getPendingUsers(onResult: (List<DocumentSnapshot>) -> Unit) {
 }
 
 fun approveUser(context: Context, userId: String) {
-    val db = FirebaseFirestore.getInstance()
-    val userRef = db.collection("users").document(userId)
-
-    userRef.get().addOnSuccessListener { document ->
-        if (document.exists()) {
-            val fcmToken = document.getString("fcmToken")
-
-            userRef.update("isApproved", true)
+    CoroutineScope(Dispatchers.IO).launch { // 🔄 Jalankan di background thread
+        try {
+            val firestore = FirebaseFirestore.getInstance()
+            firestore.collection("users").document(userId)
+                .update("isApproved", true)
                 .addOnSuccessListener {
-                    Toast.makeText(context, "User disetujui!", Toast.LENGTH_SHORT).show()
-
-                    if (!fcmToken.isNullOrEmpty()) {
-                        sendFCMNotification(context, fcmToken, "Judul Notif", "Isi Notif")
-                    }
+                    Log.d("Firestore", "User berhasil disetujui")
                 }
+                .addOnFailureListener { e ->
+                    Log.e("Firestore", "Gagal menyetujui user", e)
+                }
+        } catch (e: Exception) {
+            Log.e("Firestore", "Error: ${e.message}")
         }
     }
 }
+
 
 fun getServiceAccountJson(context: Context): InputStream? {
     return context.resources.openRawResource(R.raw.service_account)

@@ -2,6 +2,7 @@ package com.example.spmtsafetybriefingapp
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.ContentValues
 import android.content.Context
 import android.provider.MediaStore
@@ -175,27 +176,24 @@ class HomeActivity : ComponentActivity() {
 
                         val allowedRoles = listOf(
                             "Brach Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
-                            "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE",
-                            "Koordinator Lapangan Pengamanan", "Komandan Peleton", "Chief Foreman"
+                            "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE", "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah",
+                            "Koordinator Lapangan Pengamanan"
                         )
-                        val operationalRoles = listOf("Foreman", "Dispatcher")
-                        val securityRoles = listOf("Anggota Pengamanan", "Komandan Peleton")
+                        val userRoles = listOf(
+                            "Chief Foreman", "Foreman", "Dispatcher", // Operational Roles
+                            "Anggota Pengamanan", "Komandan Peleton"  // Security Roles
+                        )
                         var agendaQuery: Query? = null
                         when {
-                            userRole in allowedRoles || userRole in securityRoles || userRole in operationalRoles -> {
+                            userRole in allowedRoles || userRole in userRoles -> {
                                 agendaQuery = firestore.collection("agenda").whereEqualTo("status", "aktif")
                                 Log.d("Firestore", "Fetching active agendas for role: $userRole")
 
                                 when {
-                                    userRole in securityRoles -> {
+                                    userRole in userRoles -> {
                                         agendaQuery = agendaQuery.whereEqualTo("terminal", userTerminal)
-                                            .whereEqualTo("groupSecurity", userGroup)
-                                        Log.d("Firestore", "Security Role Filter Applied -> Terminal: $userTerminal, GroupSecurity: $userGroup")
-                                    }
-                                    userRole in operationalRoles -> {
-                                        agendaQuery = agendaQuery.whereEqualTo("terminal", userTerminal)
-                                            .whereEqualTo("groupOperational", userGroup)
-                                        Log.d("Firestore", "Operational Role Filter Applied -> Terminal: $userTerminal, GroupOperational: $userGroup")
+                                            .whereEqualTo("group", userGroup)
+                                        Log.d("Firestore", "Security & Operatioanl Role Filter Applied -> Terminal: $userTerminal, Group: $userGroup")
                                     }
                                 }
                             }
@@ -314,7 +312,7 @@ class HomeActivity : ComponentActivity() {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    if (userRole in listOf("Chief Foreman", "Komandan Peleton", "Koordinator Lapangan Pengamanan", "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah")) {
+                                    if (userRole in listOf("Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah")) {
                                         Image(
                                             painter = painterResource(id = R.drawable.ic_action_name),
                                             contentDescription = "Tambah Briefing",
@@ -333,7 +331,7 @@ class HomeActivity : ComponentActivity() {
                         val allowedRoles = setOf(
                             "Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
                             "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE",
-                            "Koordinator Lapangan Pengamanan", "Komandan Peleton", "Chief Foreman"
+                            "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah"
                         )
 
                         if (userRole in allowedRoles && activeAgenda.isNotEmpty()) {
@@ -397,10 +395,9 @@ class HomeActivity : ComponentActivity() {
 
                 for (agenda in activeAgendas) {
                     val briefingId = agenda.id
-                    val groupSecurity = agenda.getString("groupSecurity") ?: ""
-                    val groupOperational = agenda.getString("groupOperational") ?: ""
+                    val group = agenda.getString("group") ?: ""
 
-                    Log.d("Firestore", "Agenda $briefingId -> GroupSecurity: $groupSecurity, GroupOperational: $groupOperational")
+                    Log.d("Firestore", "Agenda $briefingId -> Group: $group")
 
                     val attendanceRef = firestore.collection("agenda")
                         .document(briefingId)
@@ -434,8 +431,8 @@ class HomeActivity : ComponentActivity() {
                         val userGroup = doc.getString("group") ?: ""
 
                         when (role) {
-                            "Anggota Pengamanan", "Komandan Peleton" -> userGroup == groupSecurity
-                            "Chief Foreman", "Foreman", "Dispatcher" -> userGroup == groupOperational
+                            "Anggota Pengamanan", "Komandan Peleton", "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah",
+                            "Chief Foreman", "Foreman", "Dispatcher" -> userGroup == group
                             else -> false
                         }
                     }
@@ -648,9 +645,9 @@ class HomeActivity : ComponentActivity() {
         val timeNow = hour * 60 + minute // Konversi ke menit untuk perbandingan mudah
 
         return when (shift) {
-            "Shift 1 08:00 - 16:00" -> timeNow in (7 * 60 + 30)..(7 * 60 + 50) // 23:00 - 00:00 WIB
-            "Shift 2 16:00 - 00:00" -> timeNow in (15 * 60 + 30)..(19 * 60 + 50)  // 07:00 - 08:00 WIB
-            "Shift 3 00:00 - 08:00" -> timeNow in (23 * 60 + 30)..(23 * 60 + 50) // 15:00 - 16:00 WIB
+            "Shift 1 08:00 - 16:00" -> timeNow in (7 * 60 + 30)..(7 * 60 + 50)
+            "Shift 2 16:00 - 00:00" -> timeNow in (9 * 60 + 30)..(12 * 60 + 50)
+            "Shift 3 00:00 - 08:00" -> timeNow in (23 * 60 + 30)..(23 * 60 + 50)
             else -> false
         }
     }
@@ -660,7 +657,6 @@ class HomeActivity : ComponentActivity() {
         val context = LocalContext.current
         val firestore = FirebaseFirestore.getInstance()
         val auth = FirebaseAuth.getInstance()
-        var userRole by remember { mutableStateOf("operator") }
         val terminal = agenda["terminal"] as? String ?: "Tidak diketahui"
         val shift = agenda["shift"] as? String ?: "Tidak diketahui"
         val time = (agenda["timestamp"] as? Timestamp)?.toDate()?.let { date ->
@@ -704,12 +700,10 @@ class HomeActivity : ComponentActivity() {
 
                     Log.d("Firestore", "User Login: ID=$userId, Role=$userRole, Group=$userGroup")
 
-                    // 🔹 Ambil data agenda untuk mendapatkan groupSecurity dan groupOperational
                     val agendaDoc = firestore.collection("agenda").document(briefingId).get().await()
-                    val groupSecurity = agendaDoc.getString("groupSecurity") ?: ""
-                    val groupOperational = agendaDoc.getString("groupOperational") ?: ""
+                    val group = agendaDoc.getString("group") ?: ""
 
-                    Log.d("Firestore", "Agenda Groups -> Security: $groupSecurity, Operational: $groupOperational")
+                    Log.d("Firestore", "Agenda Groups -> $group")
 
                     val validRoles = listOf(
                         "Anggota Pengamanan", "Komandan Peleton",
@@ -728,10 +722,9 @@ class HomeActivity : ComponentActivity() {
                         val group = doc.getString("group") ?: ""
 
                         val isValid = when (role) {
-                            "Anggota Pengamanan", "Komandan Peleton" ->
-                                role in validRoles && group == groupSecurity
-                            "Chief Foreman", "Foreman", "Dispatcher" ->
-                                role in validRoles && group == groupOperational
+                            "Anggota Pengamanan", "Komandan Peleton", "Chief Foreman", "Foreman",
+                            "Dispatcher", "Koordinator Operasi Jamrud", "Koordinator Operasi Mirah", "Koordinator Operasi Nilam" ->
+                                role in validRoles && group == group
                             else -> false
                         }
 
@@ -924,7 +917,6 @@ class HomeActivity : ComponentActivity() {
                     }
                 }
 
-// **Snackbar untuk Kesalahan Lokasi**
                 if (showInvalidLocation) {
                     Snackbar(
                         modifier = Modifier.padding(16.dp),
@@ -934,7 +926,7 @@ class HomeActivity : ComponentActivity() {
                             }
                         }
                     ) {
-                        Text("Waktu dan Lokasi tidak sesuai!", color = Color.White)
+                        Text("Lokasi tidak sesuai!", color = Color.White)
                     }
                 }
 
@@ -951,7 +943,6 @@ class HomeActivity : ComponentActivity() {
                     }
                 }
 
-
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
@@ -960,7 +951,10 @@ class HomeActivity : ComponentActivity() {
                             .update("status", "selesai")
                             .addOnSuccessListener {
                                 Log.d("FirestoreUpdate", "Status berhasil diperbarui menjadi selesai")
-                                shouldRefresh = true
+
+                                val intent = (context as? Activity)?.intent
+                                context.startActivity(intent)
+                                (context as? Activity)?.finish()
                             }
                             .addOnFailureListener { e ->
                                 Log.e("FirestoreUpdate", "Gagal memperbarui status", e)
@@ -1035,7 +1029,7 @@ class HomeActivity : ComponentActivity() {
                                 // Log nilai akurasi kecocokan wajah
                                 Log.d("FaceRecognition", "Akurasi wajah: ${similarity * 100}%")
 
-                                if (similarity >= 0.3) {
+                                if (similarity >= 0.4) {
                                     Toast.makeText(context, "Absensi berhasil! Akurasi: ${(similarity * 100).toInt()}%", Toast.LENGTH_SHORT).show()
 
                                     // Arahkan ke halaman AbsensiResultActivity dengan briefingId
@@ -1234,12 +1228,6 @@ class HomeActivity : ComponentActivity() {
                 .padding(16.dp),
             verticalArrangement = Arrangement.Top
         ) {
-            Text(text = "Menu", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(text = "Beranda", fontSize = 16.sp, modifier = Modifier.clickable { onCloseDrawer() })
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = "Riwayat", fontSize = 16.sp, modifier = Modifier.clickable { onCloseDrawer() })
-            Spacer(modifier = Modifier.height(8.dp))
 
             // Logout button
             Text(
