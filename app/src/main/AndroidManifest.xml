@@ -120,6 +120,11 @@
             android:exported="true"
             android:theme="@style/Theme.SPMTSafetyBriefingApp" />
 
+        <activity
+            android:name=".DashboardActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SPMTSafetyBriefingApp" />
+
     </application>
 
 </manifest>

@@ -35,7 +35,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.rememberImagePainter
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import okhttp3.Call
@@ -292,10 +291,8 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                                 "timestamp" to System.currentTimeMillis()
                             )
 
-                            // Simulasi proses penyimpanan data (seperti mengupload gambar atau data)
                             onSaveData(data, imageBitmap)
 
-                            // Setelah data disimpan, set isLoading menjadi false
                             isLoading = false
                         }
                     },

@@ -37,7 +37,7 @@ class LoginActivity : ComponentActivity() {
 
         setContent {
             LoginScreen(
-                onLoginClick = { email, password -> loginUser(email, password) },
+                onLoginClick = { email, password, onResult -> loginUser(email, password) },
                 onRegisterClick = { navigateToRegister() }
             )
         }
@@ -109,7 +109,10 @@ class LoginActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen(onLoginClick: (String, String) -> Unit, onRegisterClick: () -> Unit) {
+fun LoginScreen(
+    onLoginClick: (String, String, (Boolean) -> Unit) -> Unit,
+    onRegisterClick: () -> Unit
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
@@ -203,6 +206,6 @@ fun LoginScreen(onLoginClick: (String, String) -> Unit, onRegisterClick: () -> U
 @Preview(showBackground = true)
 @Composable
 fun LoginScreenPreview() {
-    LoginScreen(onLoginClick = { _, _ -> }, onRegisterClick = {})
+    LoginScreen(onLoginClick = { _, _, _ -> }, onRegisterClick = {})
 }
 
