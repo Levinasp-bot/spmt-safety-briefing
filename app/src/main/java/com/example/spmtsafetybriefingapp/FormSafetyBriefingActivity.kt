@@ -53,8 +53,6 @@ import java.io.IOException
 class FormSafetyBriefingActivity : ComponentActivity() {
     private val firestore = FirebaseFirestore.getInstance()
     private val cloudinaryUrl = "https://api.cloudinary.com/v1_1/deki7dwe5/image/upload"
-    private val apiKey = "735724334454793"
-    private val apiSecret = "Cf_XNHVtkyQwvd8NM8BfFx3a0oE"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,10 +79,11 @@ class FormSafetyBriefingActivity : ComponentActivity() {
         val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
             imageBitmap = bitmap
         }
-        var selectedSakit by remember { mutableStateOf("") }
-        var selectedCuti by remember { mutableStateOf("") }
-        var selectedIzin by remember { mutableStateOf("") }
-
+        var selectedSakit by remember { mutableStateOf<List<String>>(emptyList()) }
+        var selectedCuti by remember { mutableStateOf<List<String>>(emptyList()) }
+        var selectedIzin by remember { mutableStateOf<List<String>>(emptyList()) }
+        var selectedAtribut by remember { mutableStateOf<List<String>>(emptyList()) }
+        var agendaList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
         var terminal by remember { mutableStateOf("") }
         var shift by remember { mutableStateOf("") }
         var group by remember { mutableStateOf("") }
@@ -147,28 +146,149 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             DropdownMenuInput("Group", group, { group = it }, listOf("Group A", "Group B", "Group C", "Group D"))
 
             // 🔹 Dropdown untuk pekerja sakit
-            DropdownMenuInput(
-                label = "Nama Pekerja Sakit",
-                value = selectedSakit,  // ✅ Sesuai dengan parameter `value`
-                onValueChange = { selectedSakit = it }, // ✅ Sesuai dengan `onValueChange`
-                options = filteredUsers
-            )
+            Column {
+                Text("Nama Pekerja Sakit")
+                selectedSakit.forEachIndexed { index, name ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(name, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { selectedSakit = selectedSakit - name }) {
+                            Icon(painterResource(id = android.R.drawable.ic_delete), contentDescription = "Hapus")
+                        }
+                    }
+                }
+                Row {
+                    DropdownMenuInput(
+                        label = "Pilih Pekerja",
+                        value = "",  // Kosongkan untuk mencegah input yang aneh
+                        onValueChange = { newValue ->
+                            if (newValue.isNotEmpty() && !selectedSakit.contains(newValue)) {
+                                selectedSakit = selectedSakit + newValue
+                            }
+                        },
+                        options = filteredUsers
+                    )
+                    IconButton(onClick = {
+                        if (selectedSakit.isNotEmpty()) {
+                            selectedSakit = selectedSakit + ""
+                        }
+                    }) {
+                        Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah")
+                    }
+                }
+            }
 
-            // 🔹 Dropdown untuk pekerja cuti
-            DropdownMenuInput(
-                label = "Nama Pekerja Cuti",
-                value = selectedCuti,
-                onValueChange = { selectedCuti = it },
-                options = filteredUsers
-            )
+// 🔹 Dropdown untuk pekerja cuti
+            Column {
+                Text("Nama Pekerja Cuti")
+                selectedCuti.forEachIndexed { index, name ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(name, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { selectedCuti = selectedCuti - name }) {
+                            Icon(painterResource(id = android.R.drawable.ic_delete), contentDescription = "Hapus")
+                        }
+                    }
+                }
+                Row {
+                    DropdownMenuInput(
+                        label = "Pilih Pekerja",
+                        value = "",
+                        onValueChange = { newValue ->
+                            if (newValue.isNotEmpty() && !selectedCuti.contains(newValue)) {
+                                selectedCuti = selectedCuti + newValue
+                            }
+                        },
+                        options = filteredUsers
+                    )
+                    IconButton(onClick = {
+                        if (selectedCuti.isNotEmpty()) {
+                            selectedCuti = selectedCuti + ""
+                        }
+                    }) {
+                        Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah")
+                    }
+                }
+            }
 
-            // 🔹 Dropdown untuk pekerja izin
-            DropdownMenuInput(
-                label = "Nama Pekerja Izin",
-                value = selectedIzin,
-                onValueChange = { selectedIzin = it },
-                options = filteredUsers
-            )
+// 🔹 Dropdown untuk pekerja izin
+            Column {
+                Text("Nama Pekerja Izin")
+                selectedIzin.forEachIndexed { index, name ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(name, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { selectedIzin = selectedIzin - name }) {
+                            Icon(painterResource(id = android.R.drawable.ic_delete), contentDescription = "Hapus")
+                        }
+                    }
+                }
+                Row {
+                    DropdownMenuInput(
+                        label = "Pilih Pekerja",
+                        value = "",
+                        onValueChange = { newValue ->
+                            if (newValue.isNotEmpty() && !selectedIzin.contains(newValue)) {
+                                selectedIzin = selectedIzin + newValue
+                            }
+                        },
+                        options = filteredUsers
+                    )
+                    IconButton(onClick = {
+                        if (selectedIzin.isNotEmpty()) {
+                            selectedIzin = selectedIzin + ""
+                        }
+                    }) {
+                        Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah")
+                    }
+                }
+            }
+
+            Column {
+                Text("Nama Pekerja Tidak Lengkap Atribut")
+                selectedAtribut.forEachIndexed { index, name ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(name, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { selectedAtribut = selectedAtribut  - name }) {
+                            Icon(painterResource(id = android.R.drawable.ic_delete), contentDescription = "Hapus")
+                        }
+                    }
+                }
+                Row {
+                    DropdownMenuInput(
+                        label = "Pilih Pekerja",
+                        value = "",
+                        onValueChange = { newValue ->
+                            if (newValue.isNotEmpty() && !selectedAtribut.contains(newValue)) {
+                                selectedAtribut  = selectedAtribut  + newValue
+                            }
+                        },
+                        options = filteredUsers
+                    )
+                    IconButton(onClick = {
+                        if (selectedAtribut .isNotEmpty()) {
+                            selectedAtribut  = selectedAtribut  + ""
+                        }
+                    }) {
+                        Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah")
+                    }
+                }
+            }
+
+            agendaList.forEachIndexed { index, textFieldValue ->
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = textFieldValue,
+                        onValueChange = { newValue ->
+                            agendaList = agendaList.toMutableList().apply { this[index] = newValue }
+                        },
+                        label = { Text("Agenda ${index + 1}") },
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    )
+                    if (index == agendaList.size - 1) {
+                        IconButton(onClick = { agendaList = agendaList + TextFieldValue("") }) {
+                            Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah Agenda")
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -189,11 +309,26 @@ class FormSafetyBriefingActivity : ComponentActivity() {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Button(onClick = { cameraLauncher.launch(null) }) {
+            Row(modifier =
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                Button(
+                    onClick = { cameraLauncher.launch(null) },
+                    modifier = Modifier
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
+                    shape = RoundedCornerShape(8.dp))
+                {
                     Text("Ambil Foto")
                 }
-                Button(onClick = { galleryLauncher.launch("image/*") }) {
+                Button(
+                    onClick = { galleryLauncher.launch("image/*") },
+                    modifier = Modifier
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
+                    shape = RoundedCornerShape(8.dp))
+                {
                     Text("Pilih dari Galeri")
                 }
             }
@@ -214,19 +349,28 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                             "sakit" to selectedSakit,
                             "cuti" to selectedCuti,
                             "izin" to selectedIzin,
+                            "tlatribut" to selectedAtribut,
+                            "agenda" to agendaList.map { it.text },
                             "timestamp" to System.currentTimeMillis()
                         )
                         onSaveData(data, imageBitmap)
                         isLoading = false
                     }
                 },
-                modifier = Modifier.fillMaxWidth().height(56.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
+                shape = RoundedCornerShape(8.dp)
             ) {
                 Text("Simpan Data")
             }
-
             if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp
+                )
             }
         }
     }

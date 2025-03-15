@@ -390,6 +390,19 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
+    fun getUserTerminal(firestore: FirebaseFirestore, userId: String, callback: (String?) -> Unit) {
+        firestore.collection("users").document(userId).get()
+            .addOnSuccessListener { userDoc ->
+                val userTerminal = userDoc.getString("terminal")
+                callback(userTerminal) // Kirim terminal pengguna melalui callback
+            }
+            .addOnFailureListener {
+                Log.e("Firestore", "Gagal mendapatkan terminal pengguna", it)
+                callback(null) // Jika gagal, kirim null
+            }
+    }
+
+
     @Composable
     fun SafetyBriefingCard(agenda: Map<String, Any>) {
         val context = LocalContext.current
@@ -416,7 +429,8 @@ class HomeActivity : ComponentActivity() {
         var imageUri by remember { mutableStateOf<Uri?>(null) }
         var participantsCount by remember { mutableStateOf(0) }
 
-        LaunchedEffect(briefingId) {
+
+                LaunchedEffect(briefingId) {
             if (briefingId.isNotEmpty()) {
                 val attendanceSnapshot = firestore.collection("agenda")
                     .document(briefingId)
@@ -607,6 +621,7 @@ class HomeActivity : ComponentActivity() {
                         "Manager Operasi Nilam Mirah",
                         "HSSE"
                     )) {
+
                     Button(
                         onClick = {
                             if (!hasAttended) {
@@ -614,29 +629,69 @@ class HomeActivity : ComponentActivity() {
 
                                 // **Cek apakah absensi diperbolehkan berdasarkan shift**
                                 if (selectedShift != null && isAttendanceAllowed(selectedShift!!)) {
-                                    fetchUserLocation(context, fusedLocationClient) { location ->
-                                        if (location != null) {
-                                            validateLocation(firestore, location) { isValid ->
-                                                Log.d("AbsensiButton", "Status lokasi valid: $isValid")
+                                    val userId =
+                                        FirebaseAuth.getInstance().currentUser?.uid ?: return@Button
 
-                                                if (isValid) {
-                                                    val file = File(context.getExternalFilesDir(null), "photo.jpg")
-                                                    val uri = FileProvider.getUriForFile(context, "com.example.spmtsafetybriefingapp.fileprovider", file)
-                                                    photoUri.value = uri
-                                                    takePictureLauncher.launch(null)
-                                                    showInvalidLocation = false
+                                    // **Dapatkan userTerminal terlebih dahulu**
+                                    getUserTerminal(firestore, userId) { userTerminal ->
+                                        if (userTerminal != null) {
+                                            fetchUserLocation(
+                                                context,
+                                                fusedLocationClient
+                                            ) { location ->
+                                                if (location != null) {
+                                                    validateLocation(
+                                                        firestore,
+                                                        location,
+                                                        userTerminal
+                                                    ) { isValid ->
+                                                        Log.d(
+                                                            "AbsensiButton",
+                                                            "Status lokasi valid: $isValid"
+                                                        )
+
+                                                        if (isValid) {
+                                                            val file = File(
+                                                                context.getExternalFilesDir(null),
+                                                                "photo.jpg"
+                                                            )
+                                                            val uri = FileProvider.getUriForFile(
+                                                                context,
+                                                                "com.example.spmtsafetybriefingapp.fileprovider",
+                                                                file
+                                                            )
+                                                            photoUri.value = uri
+                                                            takePictureLauncher.launch(null)
+                                                            showInvalidLocation = false
+                                                        } else {
+                                                            Log.d(
+                                                                "GeoFence",
+                                                                "Lokasi tidak valid, tidak bisa melakukan absensi."
+                                                            )
+                                                            showInvalidLocation = true
+                                                        }
+                                                    }
                                                 } else {
-                                                    Log.d("GeoFence", "Lokasi tidak valid, tidak bisa melakukan absensi.")
+                                                    Log.e(
+                                                        "AbsensiButton",
+                                                        "Gagal mendapatkan lokasi pengguna."
+                                                    )
                                                     showInvalidLocation = true
                                                 }
                                             }
                                         } else {
-                                            Log.e("AbsensiButton", "Gagal mendapatkan lokasi pengguna.")
+                                            Log.e(
+                                                "AbsensiButton",
+                                                "Gagal mendapatkan terminal pengguna."
+                                            )
                                             showInvalidLocation = true
                                         }
                                     }
                                 } else {
-                                    Log.e("AbsensiButton", "Waktu absensi tidak sesuai dengan shift atau shift tidak ditemukan.")
+                                    Log.e(
+                                        "AbsensiButton",
+                                        "Waktu absensi tidak sesuai dengan shift atau shift tidak ditemukan."
+                                    )
                                     showInvalidTime = true
                                 }
                             }
@@ -652,35 +707,36 @@ class HomeActivity : ComponentActivity() {
                     ) {
                         Text(if (hasAttended) "Sudah Absen" else "Absensi")
                     }
-                }
 
-                if (showInvalidLocation) {
-                    Snackbar(
-                        modifier = Modifier.padding(16.dp),
-                        action = {
-                            TextButton(onClick = { showInvalidLocation = false }) {
-                                Text("Tutup", color = Color.White)
+                    if (showInvalidLocation) {
+                        Snackbar(
+                            modifier = Modifier.padding(16.dp),
+                            action = {
+                                TextButton(onClick = { showInvalidLocation = false }) {
+                                    Text("Tutup", color = Color.White)
+                                }
                             }
+                        ) {
+                            Text("Lokasi tidak sesuai!", color = Color.White)
                         }
-                    ) {
-                        Text("Lokasi tidak sesuai!", color = Color.White)
+                    }
+
+                    if (showInvalidTime) {
+                        Snackbar(
+                            modifier = Modifier.padding(16.dp),
+                            action = {
+                                TextButton(onClick = { showInvalidTime = false }) {
+                                    Text("Tutup", color = Color.White)
+                                }
+                            }
+                        ) {
+                            Text("Waktu absensi tidak sesuai dengan shift!", color = Color.White)
+                        }
                     }
                 }
 
-                if (showInvalidTime) {
-                    Snackbar(
-                        modifier = Modifier.padding(16.dp),
-                        action = {
-                            TextButton(onClick = { showInvalidTime = false }) {
-                                Text("Tutup", color = Color.White)
-                            }
-                        }
-                    ) {
-                        Text("Waktu absensi tidak sesuai dengan shift!", color = Color.White)
-                    }
-                }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
                     onClick = {
@@ -920,14 +976,30 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
-    fun validateLocation(firestore: FirebaseFirestore, userLocation: Location?, callback: (Boolean) -> Unit) {
+    fun validateLocation(
+        firestore: FirebaseFirestore,
+        userLocation: Location?,
+        userTerminal: String,
+        callback: (Boolean) -> Unit
+    ) {
         firestore.collection("agenda").whereEqualTo("status", "aktif").limit(1).get()
             .addOnSuccessListener { agendaSnapshot ->
                 if (!agendaSnapshot.isEmpty) {
                     val agendaDoc = agendaSnapshot.documents[0]
-                    val terminalName = agendaDoc.getString("terminal") ?: return@addOnSuccessListener callback(false)
+                    val agendaTerminal = agendaDoc.getString("terminal") ?: return@addOnSuccessListener callback(false)
 
-                    firestore.collection("geoFence").document(terminalName).get()
+                    // Tentukan daftar terminal yang diizinkan berdasarkan terminal pengguna
+                    val allowedTerminals = when (userTerminal) {
+                        "Terminal Jamrud" -> listOf("Terminal Jamrud")
+                        "Terminal Mirah", "Terminal Nilam" -> listOf("Terminal Mirah", "Terminal Nilam")
+                        else -> emptyList()
+                    }
+
+                    if (!allowedTerminals.contains(agendaTerminal)) {
+                        return@addOnSuccessListener callback(false)
+                    }
+
+                    firestore.collection("geoFence").document(agendaTerminal).get()
                         .addOnSuccessListener { geoFenceDoc ->
                             val geoPoint = geoFenceDoc.getGeoPoint("location")
                             geoPoint?.let {

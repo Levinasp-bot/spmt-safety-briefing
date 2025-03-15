@@ -804,6 +804,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
         var namaCuti by remember { mutableStateOf<List<String>>(emptyList()) }
         var namaIzin by remember { mutableStateOf<List<String>>(emptyList()) }
         var namaTanpaKeterangan by remember { mutableStateOf<List<String>>(emptyList()) }
+        var namaTidakLengkapAtribut by remember { mutableStateOf<List<String>>(emptyList()) }
 
         LaunchedEffect(agenda) {
             val briefingId = agenda?.briefingId
@@ -824,6 +825,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                         namaCuti = (document["cuti"] as? List<String>) ?: emptyList()
                         namaIzin = (document["izin"] as? List<String>) ?: emptyList()
                         namaTanpaKeterangan = (document["tanpaKeterangan"] as? List<String>) ?: emptyList()
+                        namaTidakLengkapAtribut = (document["izin"] as? List<String>) ?: emptyList()
                     } else {
                         Log.e("FirestoreDebug", "Dokumen agenda tidak ditemukan")
                     }
@@ -845,6 +847,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
             Box(
                 modifier = Modifier
                     .weight(2f)
+                    .fillMaxHeight()
                     .border(1.dp, Color.Black)
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
@@ -882,6 +885,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
             Box(
                 modifier = Modifier
                     .weight(2f)
+                    .fillMaxHeight()
                     .border(1.dp, Color.Black)
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
@@ -919,6 +923,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
             Box(
                 modifier = Modifier
                     .weight(2f)
+                    .fillMaxHeight()
                     .border(1.dp, Color.Black)
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
@@ -956,6 +961,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
             Box(
                 modifier = Modifier
                     .weight(2f)
+                    .fillMaxHeight()
                     .border(1.dp, Color.Black)
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
@@ -992,6 +998,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
             Box(
                 modifier = Modifier
                     .weight(2f)
+                    .fillMaxHeight()
                     .border(1.dp, Color.Black)
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
@@ -1003,14 +1010,19 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 )
             }
 
-            // 🔹 Kolom 2: Kosong
             Box(
                 modifier = Modifier
                     .weight(4f)
                     .border(1.dp, Color.Black)
                     .fillMaxHeight()
                     .padding(4.dp)
-            )
+            ) {
+                Column {
+                    namaTidakLengkapAtribut.forEach { nama ->
+                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
+                    }
+                }
+            }
         }
     }
 }
@@ -1672,6 +1684,7 @@ fun UnduhPdfScreen(briefingId: String) {
         var namaCuti by remember { mutableStateOf<List<String>>(emptyList()) }
         var namaIzin by remember { mutableStateOf<List<String>>(emptyList()) }
         var namaTanpaKeterangan by remember { mutableStateOf<List<String>>(emptyList()) }
+        var namaTidakLengkapAtribut by remember { mutableStateOf<List<String>>(emptyList()) }
 
         LaunchedEffect(agenda) {
             val briefingId = agenda?.briefingId
@@ -1692,6 +1705,7 @@ fun UnduhPdfScreen(briefingId: String) {
                         namaCuti = (document["cuti"] as? List<String>) ?: emptyList()
                         namaIzin = (document["izin"] as? List<String>) ?: emptyList()
                         namaTanpaKeterangan = (document["tanpaKeterangan"] as? List<String>) ?: emptyList()
+                        namaTidakLengkapAtribut = (document["tlatribut"] as? List<String>) ?: emptyList()
                     } else {
                         Log.e("FirestoreDebug", "Dokumen agenda tidak ditemukan")
                     }
@@ -1713,6 +1727,7 @@ fun UnduhPdfScreen(briefingId: String) {
             Box(
                 modifier = Modifier
                     .weight(2f)
+                    .fillMaxHeight()
                     .border(1.dp, Color.Black)
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
@@ -1750,6 +1765,7 @@ fun UnduhPdfScreen(briefingId: String) {
             Box(
                 modifier = Modifier
                     .weight(2f)
+                    .fillMaxHeight()
                     .border(1.dp, Color.Black)
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
@@ -1787,6 +1803,7 @@ fun UnduhPdfScreen(briefingId: String) {
             Box(
                 modifier = Modifier
                     .weight(2f)
+                    .fillMaxHeight()
                     .border(1.dp, Color.Black)
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
@@ -1824,6 +1841,7 @@ fun UnduhPdfScreen(briefingId: String) {
             Box(
                 modifier = Modifier
                     .weight(2f)
+                    .fillMaxHeight()
                     .border(1.dp, Color.Black)
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
@@ -1860,6 +1878,7 @@ fun UnduhPdfScreen(briefingId: String) {
             Box(
                 modifier = Modifier
                     .weight(2f)
+                    .fillMaxHeight()
                     .border(1.dp, Color.Black)
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
@@ -1878,7 +1897,13 @@ fun UnduhPdfScreen(briefingId: String) {
                     .border(1.dp, Color.Black)
                     .fillMaxHeight()
                     .padding(4.dp)
-            )
+            ) {
+                Column {
+                    namaTidakLengkapAtribut.forEach { nama ->
+                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.weight(1f))
