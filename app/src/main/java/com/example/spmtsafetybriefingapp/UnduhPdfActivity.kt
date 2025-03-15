@@ -679,7 +679,39 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                         jumlahIzin = (document["izin"] as? List<*>)?.size ?: 0
                         jumlahSakit = (document["sakit"] as? List<*>)?.size ?: 0
                         jumlahCuti = (document["cuti"] as? List<*>)?.size ?: 0
-                        tanpaKeterangan = (document["tanpaKeterangan"] as? List<*>)?.size ?: 0
+
+                        val selectedTerminal = document.getString("terminal") ?: ""
+                        val selectedGroup = document.getString("group") ?: ""
+
+                        // 🔹 Ambil total pekerja berdasarkan terminal & group
+                        Firebase.firestore.collection("users")
+                            .whereEqualTo("terminal", selectedTerminal)
+                            .whereEqualTo("group", selectedGroup)
+                            .get()
+                            .addOnSuccessListener { userSnapshot ->
+                                val totalPekerja = userSnapshot.size()
+                                Log.d("FirestoreDebug", "Total pekerja di terminal $selectedTerminal dan group $selectedGroup: $totalPekerja")
+
+                                // 🔹 Ambil jumlah pekerja yang hadir
+                                Firebase.firestore.collection("agenda")
+                                    .document(briefingId)
+                                    .collection("attendance")
+                                    .get()
+                                    .addOnSuccessListener { attendanceSnapshot ->
+                                        jumlahPekerja = attendanceSnapshot.size()
+                                        Log.d("FirestoreDebug", "Jumlah pekerja hadir: $jumlahPekerja")
+
+                                        // 🔹 Hitung jumlah pekerja tanpa keterangan
+                                        tanpaKeterangan = totalPekerja - (jumlahPekerja + jumlahIzin + jumlahSakit + jumlahCuti)
+                                        Log.d("FirestoreDebug", "Jumlah pekerja tanpa keterangan: $tanpaKeterangan")
+                                    }
+                                    .addOnFailureListener { error ->
+                                        Log.e("FirestoreDebug", "Gagal mengambil data attendance", error)
+                                    }
+                            }
+                            .addOnFailureListener { error ->
+                                Log.e("FirestoreDebug", "Gagal mengambil data users", error)
+                            }
                     } else {
                         Log.e("FirestoreDebug", "Dokumen agenda tidak ditemukan")
                     }
@@ -687,19 +719,8 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 .addOnFailureListener { error ->
                     Log.e("FirestoreDebug", "Gagal mengambil data agenda", error)
                 }
-
-            Firebase.firestore.collection("agenda")
-                .document(briefingId)
-                .collection("attendance")
-                .get()
-                .addOnSuccessListener { documents ->
-                    jumlahPekerja = documents.size()
-                    Log.d("FirestoreDebug", "Jumlah pekerja hadir: $jumlahPekerja")
-                }
-                .addOnFailureListener { error ->
-                    Log.e("FirestoreDebug", "Gagal mengambil data attendance", error)
-                }
         }
+
 
 // 🔹 Row dengan 6 kolom
         Row(
@@ -1511,7 +1532,7 @@ fun UnduhPdfScreen(briefingId: String) {
 
         var briefingData by remember { mutableStateOf<Map<String, Any>?>(null) }
 
-        LaunchedEffect(agenda) { // 🔹 Jalankan efek hanya jika agenda berubah
+        LaunchedEffect(agenda) {
             val briefingId = agenda?.briefingId
             if (briefingId == null) {
                 Log.e("FirestoreDebug", "briefingId is null")
@@ -1528,7 +1549,39 @@ fun UnduhPdfScreen(briefingId: String) {
                         jumlahIzin = (document["izin"] as? List<*>)?.size ?: 0
                         jumlahSakit = (document["sakit"] as? List<*>)?.size ?: 0
                         jumlahCuti = (document["cuti"] as? List<*>)?.size ?: 0
-                        tanpaKeterangan = (document["tanpaKeterangan"] as? List<*>)?.size ?: 0
+
+                        val selectedTerminal = document.getString("terminal") ?: ""
+                        val selectedGroup = document.getString("group") ?: ""
+
+                        // 🔹 Ambil total pekerja berdasarkan terminal & group
+                        Firebase.firestore.collection("users")
+                            .whereEqualTo("terminal", selectedTerminal)
+                            .whereEqualTo("group", selectedGroup)
+                            .get()
+                            .addOnSuccessListener { userSnapshot ->
+                                val totalPekerja = userSnapshot.size()
+                                Log.d("FirestoreDebug", "Total pekerja di terminal $selectedTerminal dan group $selectedGroup: $totalPekerja")
+
+                                // 🔹 Ambil jumlah pekerja yang hadir
+                                Firebase.firestore.collection("agenda")
+                                    .document(briefingId)
+                                    .collection("attendance")
+                                    .get()
+                                    .addOnSuccessListener { attendanceSnapshot ->
+                                        jumlahPekerja = attendanceSnapshot.size()
+                                        Log.d("FirestoreDebug", "Jumlah pekerja hadir: $jumlahPekerja")
+
+                                        // 🔹 Hitung jumlah pekerja tanpa keterangan
+                                        tanpaKeterangan = totalPekerja - (jumlahPekerja + jumlahIzin + jumlahSakit + jumlahCuti)
+                                        Log.d("FirestoreDebug", "Jumlah pekerja tanpa keterangan: $tanpaKeterangan")
+                                    }
+                                    .addOnFailureListener { error ->
+                                        Log.e("FirestoreDebug", "Gagal mengambil data attendance", error)
+                                    }
+                            }
+                            .addOnFailureListener { error ->
+                                Log.e("FirestoreDebug", "Gagal mengambil data users", error)
+                            }
                     } else {
                         Log.e("FirestoreDebug", "Dokumen agenda tidak ditemukan")
                     }
@@ -1536,29 +1589,14 @@ fun UnduhPdfScreen(briefingId: String) {
                 .addOnFailureListener { error ->
                     Log.e("FirestoreDebug", "Gagal mengambil data agenda", error)
                 }
-
-            Firebase.firestore.collection("agenda")
-                .document(briefingId)
-                .collection("attendance")
-                .get()
-                .addOnSuccessListener { documents ->
-                    jumlahPekerja = documents.size()
-                    Log.d("FirestoreDebug", "Jumlah pekerja hadir: $jumlahPekerja")
-                }
-                .addOnFailureListener { error ->
-                    Log.e("FirestoreDebug", "Gagal mengambil data attendance", error)
-                }
         }
 
-
-// 🔹 Row dengan 6 kolom
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .border(1.dp, Color.Black)
                 .padding(4.dp)
         ) {
-            // 🔹 Kolom 1: Jumlah Pekerja (orang)
             Box(
                 modifier = Modifier
                     .weight(2f)

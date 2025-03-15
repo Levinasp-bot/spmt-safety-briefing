@@ -335,14 +335,14 @@ class HomeActivity : ComponentActivity() {
                         )
 
                         //if (userRole in allowedRoles && activeAgenda.isNotEmpty()) {
-                            activeAgenda.forEach { agenda ->
-                                val briefingId = agenda["id"]?.toString() ?: ""
-                                if (briefingId.isNotEmpty()) {
-                                    AttendanceDashboard(firestore)
-                                } else {
-                                    Log.e("Debug", "Briefing ID is empty")
-                                }
-                            }
+                            //activeAgenda.forEach { agenda ->
+                                //val briefingId = agenda["id"]?.toString() ?: ""
+                                //if (briefingId.isNotEmpty()) {
+                                    //AttendanceDashboard(firestore)
+                                //} else {
+                                    //Log.e("Debug", "Briefing ID is empty")
+                                //}
+                            //}
                         }
                     }
                 }
@@ -432,7 +432,6 @@ class HomeActivity : ComponentActivity() {
             if (terminal.isNotEmpty() && terminal != "Tidak diketahui" && userId.isNotEmpty()) {
                 try {
                     val userDoc = firestore.collection("users").document(userId).get().await()
-
                     val userRole = userDoc.getString("role") ?: ""
                     val userGroup = userDoc.getString("group") ?: ""
 
@@ -444,8 +443,8 @@ class HomeActivity : ComponentActivity() {
                     Log.d("Firestore", "Agenda Groups -> $group")
 
                     val validRoles = listOf(
-                        "Anggota Pengamanan", "Komandan Peleton",
-                        "Chief Foreman", "Foreman", "Dispatcher"
+                        "Anggota Pengamanan", "Komandan Peleton", "Chief Foreman", "Foreman",
+                        "Dispatcher", "Koordinator Operasi Jamrud", "Koordinator Operasi Mirah", "Koordinator Operasi Nilam"
                     )
 
                     val userQuery = firestore.collection("users")
@@ -462,7 +461,7 @@ class HomeActivity : ComponentActivity() {
                         val isValid = when (role) {
                             "Anggota Pengamanan", "Komandan Peleton", "Chief Foreman", "Foreman",
                             "Dispatcher", "Koordinator Operasi Jamrud", "Koordinator Operasi Mirah", "Koordinator Operasi Nilam" ->
-                                role in validRoles && group == group
+                                role in validRoles  && userGroup == group
                             else -> false
                         }
 

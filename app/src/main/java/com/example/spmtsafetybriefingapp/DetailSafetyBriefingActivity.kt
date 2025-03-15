@@ -70,18 +70,37 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
                     jumlahSakit = (document["sakit"] as? List<*>)?.size ?: 0
                     jumlahCuti = (document["cuti"] as? List<*>)?.size ?: 0
                     jumlahIzin = (document["izin"] as? List<*>)?.size ?: 0
-                    tanpaKeterangan  = (document["tanpaKeterangan"] as? List<*>)?.size ?: 0
-                    Log.d("FirestoreData", "Data yang diterima: ${document.data}")
+
+                    val selectedTerminal = document.getString("terminal") ?: ""
+                    val selectedGroup = document.getString("group") ?: ""
+
+                    Log.d("FirestoreData", "Terminal: $selectedTerminal, Group: $selectedGroup")
+
+                    firestore.collection("users")
+                        .whereEqualTo("terminal", selectedTerminal)
+                        .whereEqualTo("group", selectedGroup)
+                        .get()
+                        .addOnSuccessListener { snapshot ->
+                            val totalPekerja = snapshot.size() // Jumlah total pekerja sesuai terminal & group
+
+                            // 🔹 Ambil jumlah hadir dari subkoleksi attendance
+                            firestore.collection("agenda").document(briefingId).collection("attendance")
+                                .get()
+                                .addOnSuccessListener { attendanceSnapshot ->
+                                    jumlahHadir = attendanceSnapshot.size()
+
+                                    tanpaKeterangan = totalPekerja - (jumlahHadir + jumlahIzin + jumlahSakit + jumlahCuti)
+                                    Log.d("totalPekerja", "Jumlah: $totalPekerja")
+                                }
+                                .addOnFailureListener { error ->
+                                    Log.e("FirestoreError", "Gagal mengambil jumlah hadir", error)
+                                }
+                        }
+                        .addOnFailureListener { error ->
+                            Log.e("FirestoreError", "Gagal mengambil daftar pekerja", error)
+                        }
                 }
             }
-
-        // Count documents in the attendance subcollection
-        val attendanceRef = firestore.collection("agenda").document(briefingId).collection("attendance")
-        attendanceRef.get().addOnSuccessListener { snapshot ->
-            jumlahHadir = snapshot.size()
-        }.addOnFailureListener { error ->
-            Log.e("FirestoreError", "Gagal mengambil jumlah hadir", error)
-        }
 
         onDispose {
             listenerRegistration?.remove()

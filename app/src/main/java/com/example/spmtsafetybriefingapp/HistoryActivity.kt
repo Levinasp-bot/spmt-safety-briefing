@@ -94,7 +94,7 @@ fun HistoryScreen(navController: NavController) {
         }
     ) {
         Scaffold(
-            bottomBar = { BottomNavigationBar(navController) }
+            bottomBar = { BottomNavigationBar() }
         ) { paddingValues ->
             Column(
                 modifier = Modifier
@@ -213,11 +213,14 @@ fun formatTimestamp(date: Date): String {
 }
 
 @Composable
-fun BottomNavigationBar(navController: NavController) {
-    val context = LocalContext.current // 🔹 Ambil Context dengan LocalContext.current
+fun BottomNavigationBar() {
+    val context = LocalContext.current
     var selectedItem by remember { mutableStateOf(0) }
 
-    NavigationBar(containerColor = Color(0xFF0E73A7)) {
+    NavigationBar(
+        containerColor = Color(0xFF0E73A7) // Mengubah warna latar belakang
+    ) {
+        // 🔹 Item Beranda
         NavigationBarItem(
             icon = {
                 Icon(
@@ -225,11 +228,17 @@ fun BottomNavigationBar(navController: NavController) {
                     contentDescription = "Beranda"
                 )
             },
-            label = { Text("Beranda", fontSize = 12.sp, color = Color.White) },
+            label = {
+                Text(
+                    "Beranda",
+                    fontSize = 12.sp,
+                    color = Color.White
+                )
+            },
             selected = selectedItem == 0,
             onClick = {
                 selectedItem = 0
-                context.startActivity(Intent(context, HomeActivity::class.java)) // 🔹 Navigasi ke HomeActivity
+                context.startActivity(Intent(context, HomeActivity::class.java))
             },
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = Color.White,
@@ -240,18 +249,54 @@ fun BottomNavigationBar(navController: NavController) {
             )
         )
 
+        // 🔹 Item Dashboard (Menu Tengah)
         NavigationBarItem(
             icon = {
                 Icon(
-                    painterResource(id = if (selectedItem == 1) R.drawable.history_stroke else R.drawable.history_filled),
-                    contentDescription = "Riwayat"
+                    painterResource(id = if (selectedItem == 1) R.drawable.dashboard_filled else R.drawable.dashboard_stroke),
+                    contentDescription = "Dashboard"
                 )
             },
-            label = { Text("Riwayat", fontSize = 12.sp, color = Color.White) },
+            label = {
+                Text(
+                    "Dashboard",
+                    fontSize = 12.sp,
+                    color = Color.White
+                )
+            },
             selected = selectedItem == 1,
             onClick = {
                 selectedItem = 1
-                context.startActivity(Intent(context, HistoryActivity::class.java)) // 🔹 Navigasi ke HistoryActivity
+                context.startActivity(Intent(context, DashboardActivity::class.java))
+            },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = Color.White,
+                unselectedIconColor = Color.White,
+                selectedTextColor = Color.White,
+                unselectedTextColor = Color.White,
+                indicatorColor = Color.Transparent
+            )
+        )
+
+        // 🔹 Item Riwayat
+        NavigationBarItem(
+            icon = {
+                Icon(
+                    painterResource(id = if (selectedItem == 2) R.drawable.history_stroke else R.drawable.history_filled),
+                    contentDescription = "Riwayat"
+                )
+            },
+            label = {
+                Text(
+                    "Riwayat",
+                    fontSize = 12.sp,
+                    color = Color.White
+                )
+            },
+            selected = selectedItem == 2,
+            onClick = {
+                selectedItem = 2
+                context.startActivity(Intent(context, HistoryActivity::class.java))
             },
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = Color.White,

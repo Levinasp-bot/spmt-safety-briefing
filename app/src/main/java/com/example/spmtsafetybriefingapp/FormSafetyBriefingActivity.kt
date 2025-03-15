@@ -81,17 +81,13 @@ class FormSafetyBriefingActivity : ComponentActivity() {
         val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
             imageBitmap = bitmap
         }
+        var selectedSakit by remember { mutableStateOf("") }
+        var selectedCuti by remember { mutableStateOf("") }
+        var selectedIzin by remember { mutableStateOf("") }
 
         var terminal by remember { mutableStateOf("") }
         var shift by remember { mutableStateOf("") }
-        var koordinator by remember { mutableStateOf("") }
         var group by remember { mutableStateOf("") }
-        //var groupOperational by remember { mutableStateOf("") }
-        var agendaList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
-        var sakitList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
-        var cutiList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
-        var izinList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
-        var tanpaketList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
         var isLoading by remember { mutableStateOf(false) }
 
         val context = LocalContext.current
@@ -106,6 +102,32 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             }
         }
 
+        val allUsers = remember { mutableStateListOf<User>() }
+
+        // 🔹 Ambil data dari Firestore saat pertama kali Composable dipanggil
+        LaunchedEffect(Unit) {
+            firestore.collection("users").get()
+                .addOnSuccessListener { result ->
+                    allUsers.clear()
+                    for (document in result) {
+                        val user = User(
+                            name = document.getString("name") ?: "",
+                            terminal = document.getString("terminal") ?: "",
+                            group = document.getString("group") ?: ""
+                        )
+                        allUsers.add(user)
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e("Firestore", "Gagal mengambil data users: ${e.message}")
+                }
+        }
+
+        // 🔹 Filter pekerja berdasarkan Terminal & Group yang dipilih
+        val filteredUsers = allUsers.filter { user ->
+            user.terminal == terminal && user.group == group
+        }.map { it.name }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -119,104 +141,38 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
             )
 
+            // 🔹 Dropdown untuk memilih Terminal, Shift, dan Group
             DropdownMenuInput("Terminal", terminal, { terminal = it }, listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah"))
             DropdownMenuInput("Shift", shift, { shift = it }, listOf("Shift 1 08:00 - 16:00", "Shift 2 16:00 - 00:00", "Shift 3 00:00 - 08:00"))
-            //DropdownMenuInput("Koordinator", koordinator, { koordinator = it }, listOf("Darman", "Umar Hotob", ))
             DropdownMenuInput("Group", group, { group = it }, listOf("Group A", "Group B", "Group C", "Group D"))
-            //DropdownMenuInput("Group Operational", groupOperational, { groupOperational = it }, listOf("Group A", "Group B", "Group C", "Group D"))
 
-            agendaList.forEachIndexed { index, textFieldValue ->
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = textFieldValue,
-                        onValueChange = { newValue ->
-                            agendaList = agendaList.toMutableList().apply { this[index] = newValue }
-                        },
-                        label = { Text("Agenda ${index + 1}") },
-                        modifier = Modifier.weight(1f).padding(end = 8.dp)
-                    )
-                    if (index == agendaList.size - 1) {
-                        IconButton(onClick = { agendaList = agendaList + TextFieldValue("") }) {
-                            Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah Agenda")
-                        }
-                    }
-                }
-            }
+            // 🔹 Dropdown untuk pekerja sakit
+            DropdownMenuInput(
+                label = "Nama Pekerja Sakit",
+                value = selectedSakit,  // ✅ Sesuai dengan parameter `value`
+                onValueChange = { selectedSakit = it }, // ✅ Sesuai dengan `onValueChange`
+                options = filteredUsers
+            )
 
-            sakitList.forEachIndexed { index, textFieldValue ->
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = textFieldValue,
-                        onValueChange = { newValue ->
-                            sakitList = sakitList.toMutableList().apply { this[index] = newValue }
-                        },
-                        label = { Text("Nama Pekerja Sakit ${index + 1}") },
-                        modifier = Modifier.weight(1f).padding(end = 8.dp)
-                    )
-                    if (index == agendaList.size - 1) {
-                        IconButton(onClick = { agendaList = agendaList + TextFieldValue("") }) {
-                            Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah Agenda")
-                        }
-                    }
-                }
-            }
+            // 🔹 Dropdown untuk pekerja cuti
+            DropdownMenuInput(
+                label = "Nama Pekerja Cuti",
+                value = selectedCuti,
+                onValueChange = { selectedCuti = it },
+                options = filteredUsers
+            )
 
-            cutiList.forEachIndexed { index, textFieldValue ->
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = textFieldValue,
-                        onValueChange = { newValue ->
-                            cutiList = cutiList.toMutableList().apply { this[index] = newValue }
-                        },
-                        label = { Text("Nama Pekerja Cuti ${index + 1}") },
-                        modifier = Modifier.weight(1f).padding(end = 8.dp)
-                    )
-                    if (index == cutiList.size - 1) {
-                        IconButton(onClick = { cutiList = cutiList + TextFieldValue("") }) {
-                            Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah Agenda")
-                        }
-                    }
-                }
-            }
-
-            izinList.forEachIndexed { index, textFieldValue ->
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = textFieldValue,
-                        onValueChange = { newValue ->
-                            izinList = izinList.toMutableList().apply { this[index] = newValue }
-                        },
-                        label = { Text("Nama Pekerja Izin ${index + 1}") },
-                        modifier = Modifier.weight(1f).padding(end = 8.dp)
-                    )
-                    if (index == izinList.size - 1) {
-                        IconButton(onClick = { izinList = izinList + TextFieldValue("") }) {
-                            Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah Agenda")
-                        }
-                    }
-                }
-            }
-
-            tanpaketList.forEachIndexed { index, textFieldValue ->
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = textFieldValue,
-                        onValueChange = { newValue ->
-                            tanpaketList = tanpaketList.toMutableList().apply { this[index] = newValue }
-                        },
-                        label = { Text("Nama Pekerja Tanpa Keterangan ${index + 1}") },
-                        modifier = Modifier.weight(1f).padding(end = 8.dp)
-                    )
-                    if (index == tanpaketList.size - 1) {
-                        IconButton(onClick = { tanpaketList = tanpaketList + TextFieldValue("") }) {
-                            Icon(painterResource(id = android.R.drawable.ic_input_add), contentDescription = "Tambah Agenda")
-                        }
-                    }
-                }
-            }
+            // 🔹 Dropdown untuk pekerja izin
+            DropdownMenuInput(
+                label = "Nama Pekerja Izin",
+                value = selectedIzin,
+                onValueChange = { selectedIzin = it },
+                options = filteredUsers
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // 🔹 Dokumentasi Foto
             imageBitmap?.let { bitmap ->
                 Image(
                     painter = remember { BitmapPainter(bitmap.asImageBitmap()) },
@@ -234,80 +190,43 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Button(onClick = { cameraLauncher.launch(null) },
-                    modifier = Modifier
-                        .fillMaxWidth(0.34f)
-                        .height(40.dp)
-                        .testTag("ambil_foto"),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
-                    shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
-                ) {
+                Button(onClick = { cameraLauncher.launch(null) }) {
                     Text("Ambil Foto")
                 }
-                Button(onClick = { galleryLauncher.launch("image/*") },
-                    modifier = Modifier
-                        .fillMaxWidth(0.64f)
-                        .height(40.dp)
-                        .testTag("pilih_foto"),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
-                    shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
-                ){
+                Button(onClick = { galleryLauncher.launch("image/*") }) {
                     Text("Pilih dari Galeri")
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (isLoading) {
-                CircularProgressIndicator()
-            }
-
-            var isLoading by remember { mutableStateOf(false) }
-
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Tombol untuk menyimpan data
-                Button(
-                    onClick = {
-                        if (imageBitmap == null) {
-                            Toast.makeText(context, "Foto dokumentasi kosong", Toast.LENGTH_SHORT).show()
-                        } else {
-                            // Set isLoading menjadi true untuk menunjukkan progress bar
-                            isLoading = true
-
-                            val data = mapOf(
-                                "terminal" to terminal,
-                                "shift" to shift,
-                                "koordinator" to koordinator,
-                                "group" to group,
-                                //"groupOperational" to groupOperational,
-                                "agenda" to agendaList.map { it.text },
-                                "sakit" to sakitList.map { it.text },
-                                "izin" to izinList.map { it.text },
-                                "cuti" to cutiList.map { it.text },
-                                "tanpaKeterangan" to tanpaketList.map { it.text },
-                                "timestamp" to System.currentTimeMillis()
-                            )
-
-                            onSaveData(data, imageBitmap)
-
-                            isLoading = false
-                        }
-                    },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .testTag("simpan_data"),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
-                shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
+            // 🔹 Tombol Simpan Data
+            Button(
+                onClick = {
+                    if (imageBitmap == null) {
+                        Toast.makeText(context, "Foto dokumentasi kosong", Toast.LENGTH_SHORT).show()
+                    } else {
+                        isLoading = true
+                        val data = mapOf(
+                            "terminal" to terminal,
+                            "shift" to shift,
+                            "group" to group,
+                            "sakit" to selectedSakit,
+                            "cuti" to selectedCuti,
+                            "izin" to selectedIzin,
+                            "timestamp" to System.currentTimeMillis()
+                        )
+                        onSaveData(data, imageBitmap)
+                        isLoading = false
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(56.dp)
             ) {
                 Text("Simpan Data")
             }
-                if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.padding(16.dp))
-                }
+
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
             }
         }
     }
@@ -416,3 +335,9 @@ fun DropdownMenuInput(label: String, value: String, onValueChange: (String) -> U
         }
     }
 }
+
+data class User(
+    val name: String,
+    val terminal: String,
+    val group: String
+)

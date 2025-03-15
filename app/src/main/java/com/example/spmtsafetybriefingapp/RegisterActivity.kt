@@ -92,7 +92,7 @@ class RegisterActivity : ComponentActivity() {
 
         val groupOptions = listOf("Group A", "Group B", "Group C", "Group D")
         var group by remember { mutableStateOf(groupOptions.first()) }
-        val showGroupDropdown = role in listOf("Komandan Peleton", "Anggota Pengamanan", "Chief Foreman", "Foreman", "Dispatcher")
+        val showGroupDropdown = role in listOf("Komandan Peleton", "Anggota Pengamanan", "Chief Foreman", "Foreman", "Dispatcher", "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah")
         var imageUri by remember { mutableStateOf<Uri?>(null) }
         var faceEmbedding by remember { mutableStateOf<List<Float>?>(null) }
         var isLoading by remember { mutableStateOf(false) }
