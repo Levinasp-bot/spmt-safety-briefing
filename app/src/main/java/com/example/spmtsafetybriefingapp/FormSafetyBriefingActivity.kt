@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import okhttp3.Call
@@ -95,6 +96,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
         var selectedAtribut by remember { mutableStateOf<List<String>>(emptyList()) }
         var agendaList by remember { mutableStateOf(listOf(TextFieldValue(""))) }
         var terminal by remember { mutableStateOf("") }
+        var tempat by remember { mutableStateOf("") }
         var shift by remember { mutableStateOf("") }
         var group by remember { mutableStateOf("") }
         var isLoading by remember { mutableStateOf(false) }
@@ -113,7 +115,6 @@ class FormSafetyBriefingActivity : ComponentActivity() {
 
         val allUsers = remember { mutableStateListOf<User>() }
 
-        // 🔹 Ambil data dari Firestore saat pertama kali Composable dipanggil
         LaunchedEffect(Unit) {
             firestore.collection("users").get()
                 .addOnSuccessListener { result ->
@@ -132,7 +133,32 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 }
         }
 
-        // 🔹 Filter pekerja berdasarkan Terminal & Group yang dipilih
+        val auth = FirebaseAuth.getInstance()
+        val currentUser = auth.currentUser
+
+        if (currentUser != null) {
+            val userId = currentUser.uid
+            val db = FirebaseFirestore.getInstance()
+
+            db.collection("users").document(userId)
+                .get()
+                .addOnSuccessListener { document ->
+                    if (document.exists()) {
+                        terminal = document.getString("terminal") ?: "Tidak Diketahui"
+                        group = document.getString("group") ?: "Tidak Diketahui"
+
+                        println("Terminal: $terminal, Group: $group")
+                    } else {
+                        println("Data user tidak ditemukan di Firestore.")
+                    }
+                }
+                .addOnFailureListener { e ->
+                    println("Gagal mengambil data user: ${e.message}")
+                }
+        } else {
+            println("❌ Tidak ada user yang login!")
+        }
+
         val filteredUsers = allUsers.filter { user ->
             user.terminal == terminal && user.group == group
         }.map { it.name }
@@ -150,12 +176,10 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
             )
 
-            // 🔹 Dropdown untuk memilih Terminal, Shift, dan Group
-            DropdownMenuInput("Terminal", terminal, { terminal = it }, listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah"))
+            DropdownMenuInput("Tempat Briefing", tempat, { tempat = it }, listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah"))
             DropdownMenuInput("Shift", shift, { shift = it }, listOf("Shift 1 08:00 - 16:00", "Shift 2 16:00 - 00:00", "Shift 3 00:00 - 08:00"))
             DropdownMenuInput("Group", group, { group = it }, listOf("Group A", "Group B", "Group C", "Group D"))
 
-            // 🔹 Dropdown untuk pekerja sakit
             Column {
                 Text("Nama Pekerja Sakit")
                 selectedSakit.forEachIndexed { index, name ->
@@ -169,7 +193,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 Row {
                     DropdownMenuInput(
                         label = "Pilih Pekerja",
-                        value = "",  // Kosongkan untuk mencegah input yang aneh
+                        value = "",
                         onValueChange = { newValue ->
                             if (newValue.isNotEmpty() && !selectedSakit.contains(newValue)) {
                                 selectedSakit = selectedSakit + newValue
@@ -345,7 +369,6 @@ class FormSafetyBriefingActivity : ComponentActivity() {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 🔹 Tombol Simpan Data
             Button(
                 onClick = {
                     if (imageBitmap == null) {
@@ -353,10 +376,24 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                     } else {
                         isLoading = true  // ⬅️ Aktifkan loading sebelum menyimpan data
 
+                        val koordinator = if (terminal == "Terminal Jamrud") {
+                            when (group) {
+                                "Group A" -> "Rahmad Arif Nurcahyo"
+                                "Group B" -> "M.Yusuf"
+                                "Group C" -> "Darman"
+                                "Group D" -> "Umar Hotob"
+                                else -> "Tidak diketahui"
+                            }
+                        } else {
+                            "Tidak diketahui"
+                        }
+
                         val data = mapOf(
                             "terminal" to terminal,
+                            "tempat" to tempat,
                             "shift" to shift,
                             "group" to group,
+                            "koordinator" to koordinator,
                             "sakit" to selectedSakit,
                             "cuti" to selectedCuti,
                             "izin" to selectedIzin,
@@ -365,7 +402,6 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                             "timestamp" to System.currentTimeMillis()
                         )
 
-                        // ⬇️ Gunakan try-catch untuk menangani kegagalan penyimpanan
                         try {
                             onSaveData(data, imageBitmap)
                         } catch (e: Exception) {
@@ -375,7 +411,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                         }
                     }
                 },
-                enabled = !isLoading, // ⬅️ Nonaktifkan tombol jika sedang loading
+            enabled = !isLoading, // ⬅️ Nonaktifkan tombol jika sedang loading
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),

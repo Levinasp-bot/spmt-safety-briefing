@@ -364,7 +364,7 @@ class HomeActivity : ComponentActivity() {
         db.collection("agenda").document(agendaId).get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
-                    val shift = document.getString("shift") // Pastikan Firestore memiliki field "shift"
+                    val shift = document.getString("shift")
                     onResult(shift)
                 } else {
                     onResult(null)

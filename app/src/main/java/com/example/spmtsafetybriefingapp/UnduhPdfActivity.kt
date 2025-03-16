@@ -260,7 +260,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                             SimpleDateFormat("EEEE, dd MMMM yyyy", Locale("id")).format(it)
                         } ?: "-"
                     }",
-                    fontSize = 8.sp
+                    fontSize = 7.sp
                 )
             }
 
@@ -277,7 +277,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     "Jam: ${
                         agenda?.shift?.split(" ")?.drop(2)?.joinToString(" ") ?: "-"
                     }",
-                    fontSize = 8.sp
+                    fontSize = 7.sp
                 )
             }
 
@@ -293,8 +293,10 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 Text(
                     "${
                         agenda?.shift?.split(" ")?.take(2)?.joinToString(" ") ?: "-"
-                    }",
-                    fontSize = 8.sp
+                    } (${
+                        agenda?.group ?: "-"
+                    })",
+                    fontSize = 7.sp
                 )
             }
 
@@ -308,9 +310,8 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 contentAlignment = Alignment.CenterStart
             ) {
                 Text(
-                    "Tempat: ${agenda?.terminal ?: "-"}",
-                    fontSize = 8.sp,
-                    textAlign = TextAlign.Center
+                    "Tempat: ${agenda?.tempat ?: "-"}",
+                    fontSize = 7.sp
                 )
             }
         }
@@ -1024,6 +1025,41 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 }
             }
         }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+            horizontalArrangement = Arrangement.SpaceAround
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("PERWIRA BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
+                Spacer(modifier = Modifier.height(40.dp)) // Ruang untuk tanda tangan
+                Text(
+                    text = when (agenda?.terminal) {
+                        "Terminal Jamrud" -> "(Anton Yudhiana)"
+                        "Terminal Mirah", "Terminal Nilam" -> "(Dimas Wibowo)"
+                        else -> "(Nama Tidak Diketahui)"
+                    },
+                    fontSize = 7.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("KOORDINATOR BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
+                Spacer(modifier = Modifier.height(40.dp)) // Ruang untuk tanda tangan
+                Text(
+                    text = "(${agenda?.koordinator ?: "-"})",
+                    fontSize = 7.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
     }
 }
 
@@ -1147,7 +1183,7 @@ fun UnduhPdfScreen(briefingId: String) {
                             SimpleDateFormat("EEEE, dd MMMM yyyy", Locale("id")).format(it)
                         } ?: "-"
                     }",
-                    fontSize = 8.sp
+                    fontSize = 7.sp
                 )
             }
 
@@ -1163,7 +1199,7 @@ fun UnduhPdfScreen(briefingId: String) {
                     "Jam: ${
                         agenda?.shift?.split(" ")?.drop(2)?.joinToString(" ") ?: "-"
                     }",
-                    fontSize = 8.sp
+                    fontSize = 7.sp
                 )
             }
 
@@ -1179,8 +1215,10 @@ fun UnduhPdfScreen(briefingId: String) {
                 Text(
                     "${
                         agenda?.shift?.split(" ")?.take(2)?.joinToString(" ") ?: "-"
-                    }",
-                    fontSize = 8.sp
+                    } (${
+                        agenda?.group ?: "-"
+                    })",
+                    fontSize = 7.sp
                 )
             }
 
@@ -1194,9 +1232,8 @@ fun UnduhPdfScreen(briefingId: String) {
                 contentAlignment = Alignment.CenterStart
             ) {
                 Text(
-                    "Tempat: ${agenda?.terminal ?: "-"}",
-                    fontSize = 8.sp,
-                    textAlign = TextAlign.Center
+                    "Tempat: ${agenda?.tempat ?: "-"}",
+                    fontSize = 7.sp
                 )
             }
         }
@@ -1906,6 +1943,41 @@ fun UnduhPdfScreen(briefingId: String) {
             }
         }
 
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+            horizontalArrangement = Arrangement.SpaceAround
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("PERWIRA BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
+                Spacer(modifier = Modifier.height(40.dp)) // Ruang untuk tanda tangan
+                Text(
+                    text = when (agenda?.terminal) {
+                        "Terminal Jamrud" -> "(Anton Yudhiana)"
+                        "Terminal Mirah", "Terminal Nilam" -> "(Dimas Wibowo)"
+                        else -> "(Nama Tidak Diketahui)"
+                    },
+                    fontSize = 7.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("KOORDINATOR BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
+                Spacer(modifier = Modifier.height(40.dp)) // Ruang untuk tanda tangan
+                Text(
+                    text = "(${agenda?.koordinator ?: "-"})",
+                    fontSize = 7.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.weight(1f))
 
         Button(
@@ -1927,6 +1999,8 @@ fun UnduhPdfScreen(briefingId: String) {
 data class Agenda_detail(
     val briefingId: String = "",
     val terminal: String = "Tidak diketahui",
+    val tempat: String = "Tidak diketahui",
+    val group: String = "Tidak diketahui",
     val shift: String = "Tidak diketahui",
     val timestamp: Timestamp? = null,
     val details: String? = "",

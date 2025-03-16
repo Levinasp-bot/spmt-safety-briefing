@@ -122,14 +122,22 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
                 .verticalScroll(scrollState)
         ) {
             briefingData?.let { data ->
+                val terminal = data["terminal"] as? String ?: "Tidak diketahui"
+                val tempat = data["tempat"] as? String ?: "Tidak diketahui"
+                val perwiraBriefing = when (terminal) {
+                    "Terminal Jamrud" -> "Anton Yudhiana"
+                    "Terminal Mirah", "Terminal Nilam" -> "Dimas Wibowo"
+                    else -> "Tidak diketahui"
+                }
+
                 CardSection("Informasi Briefing") {
-                    DetailItem("Terminal", data["terminal"] as? String ?: "Tidak diketahui")
+                    DetailItem("Tempat", tempat)
                     DetailItem("Shift", data["shift"] as? String ?: "Tidak diketahui")
-                    DetailItem("Perwira Briefing", data["perwira_briefing"] as? String ?: "Tidak diketahui")
+                    DetailItem("Perwira Briefing", perwiraBriefing)
                     DetailItem("Koordinator Briefing", data["koordinator"] as? String ?: "Tidak diketahui")
                 }
 
-                CardSection("Agenda Briefing") {
+            CardSection("Agenda Briefing") {
                     val agendaList = (data["agenda"] as? List<*>)?.mapNotNull { it.toString() } ?: emptyList()
                     if (agendaList.isNotEmpty()) {
                         agendaList.forEachIndexed { index, agenda ->
