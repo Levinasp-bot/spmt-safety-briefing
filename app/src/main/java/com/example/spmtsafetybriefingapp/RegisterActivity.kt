@@ -86,13 +86,15 @@ class RegisterActivity : ComponentActivity() {
         val terminalOptions = listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah")
         var terminal by remember { mutableStateOf(terminalOptions.first()) }
 
-        val roleOptions = listOf("Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi", "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE", "Koordinator Lapangan Pengamanan",
-            "Komandan Peleton", "Anggota Pengamanan", "Chief Foreman", "Foreman", "Dispatcher", "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah")
+        val roleOptions = listOf("Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi", "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah",
+            "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah", "HSSE", "Koordinator Lapangan Pengamanan",
+             "Anggota Pengamanan", "Operasional", "Komandan Peleton")
         var role by remember { mutableStateOf(roleOptions.first()) }
 
         val groupOptions = listOf("Group A", "Group B", "Group C", "Group D")
         var group by remember { mutableStateOf(groupOptions.first()) }
-        val showGroupDropdown = role in listOf("Komandan Peleton", "Anggota Pengamanan", "Chief Foreman", "Foreman", "Dispatcher", "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah")
+        val showGroupDropdown = role in listOf("Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah",
+            "Anggota Pengamanan", "Operasional", "Komandan Peleton")
         var imageUri by remember { mutableStateOf<Uri?>(null) }
         var faceEmbedding by remember { mutableStateOf<List<Float>?>(null) }
         var isLoading by remember { mutableStateOf(false) }

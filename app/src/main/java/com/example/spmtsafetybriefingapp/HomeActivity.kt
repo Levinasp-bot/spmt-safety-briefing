@@ -180,8 +180,7 @@ class HomeActivity : ComponentActivity() {
                             "Koordinator Lapangan Pengamanan"
                         )
                         val userRoles = listOf(
-                            "Chief Foreman", "Foreman", "Dispatcher",
-                            "Anggota Pengamanan", "Komandan Peleton",
+                            "Anggota Pengamanan", "Operasional", "Komandan Peleton",
                             "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah"
                         )
                         var agendaQuery: Query? = null
@@ -457,8 +456,8 @@ class HomeActivity : ComponentActivity() {
                     Log.d("Firestore", "Agenda Groups -> $group")
 
                     val validRoles = listOf(
-                        "Anggota Pengamanan", "Komandan Peleton", "Chief Foreman", "Foreman",
-                        "Dispatcher", "Koordinator Operasi Jamrud", "Koordinator Operasi Mirah", "Koordinator Operasi Nilam"
+                        "Anggota Pengamanan", "Operasional", "Komandan Peleton",
+                        "Koordinator Operasi Jamrud", "Koordinator Operasi Mirah", "Koordinator Operasi Nilam"
                     )
 
                     val userQuery = firestore.collection("users")
@@ -473,8 +472,8 @@ class HomeActivity : ComponentActivity() {
                         val group = doc.getString("group") ?: ""
 
                         val isValid = when (role) {
-                            "Anggota Pengamanan", "Komandan Peleton", "Chief Foreman", "Foreman",
-                            "Dispatcher", "Koordinator Operasi Jamrud", "Koordinator Operasi Mirah", "Koordinator Operasi Nilam" ->
+                            "Anggota Pengamanan", "Operasional", "Komandan Peleton",
+                            "Koordinator Operasi Jamrud", "Koordinator Operasi Mirah", "Koordinator Operasi Nilam" ->
                                 role in validRoles  && userGroup == group
                             else -> false
                         }
