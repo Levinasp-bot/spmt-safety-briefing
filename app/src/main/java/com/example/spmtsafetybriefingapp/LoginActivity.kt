@@ -37,15 +37,18 @@ class LoginActivity : ComponentActivity() {
 
         setContent {
             LoginScreen(
-                onLoginClick = { email, password, onResult -> loginUser(email, password) },
+                onLoginClick = { email, password, onResult ->
+                    loginUser(email, password, onResult)
+                },
                 onRegisterClick = { navigateToRegister() }
             )
         }
     }
 
-    private fun loginUser(nipp: String, password: String) {
+    private fun loginUser(nipp: String, password: String, onResult: (Boolean) -> Unit) {
         if (nipp.isBlank() || password.isBlank()) {
             Toast.makeText(this, "NIPP dan password tidak boleh kosong", Toast.LENGTH_SHORT).show()
+            onResult(false)
             return
         }
 
@@ -73,32 +76,40 @@ class LoginActivity : ComponentActivity() {
                                                 val intent = Intent(this, HomeActivity::class.java)
                                                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                                                 startActivity(intent)
+                                                onResult(true)
                                             } else {
                                                 Toast.makeText(this, "Akun Anda belum disetujui oleh Manager Terminal", Toast.LENGTH_LONG).show()
                                                 auth.signOut()
+                                                onResult(false)
                                             }
                                         } else {
                                             Toast.makeText(this, "Data pengguna tidak ditemukan", Toast.LENGTH_LONG).show()
                                             auth.signOut()
+                                            onResult(false)
                                         }
                                     }
                                     .addOnFailureListener { e ->
                                         Toast.makeText(this, "Gagal memeriksa status akun: ${e.message}", Toast.LENGTH_LONG).show()
                                         auth.signOut()
+                                        onResult(false)
                                     }
                             }
                             .addOnFailureListener { e ->
                                 Toast.makeText(this, "Login gagal: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                onResult(false)
                             }
                     } else {
                         Toast.makeText(this, "Email tidak ditemukan untuk NIPP ini", Toast.LENGTH_LONG).show()
+                        onResult(false)
                     }
                 } else {
                     Toast.makeText(this, "NIPP tidak terdaftar", Toast.LENGTH_LONG).show()
+                    onResult(false)
                 }
             }
             .addOnFailureListener { e ->
                 Toast.makeText(this, "Gagal mengambil data pengguna: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                onResult(false)
             }
     }
 
@@ -175,7 +186,10 @@ fun LoginScreen(
             onClick = {
                 isLoading = true
                 onLoginClick(email, password) { success ->
-                    isLoading = !success // Jika gagal, isLoading kembali ke false
+                    isLoading = false
+                    if (!success) {
+                        isLoading = false
+                    }
                 }
             },
             modifier = Modifier

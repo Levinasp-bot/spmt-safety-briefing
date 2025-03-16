@@ -176,12 +176,13 @@ class HomeActivity : ComponentActivity() {
 
                         val allowedRoles = listOf(
                             "Brach Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
-                            "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE", "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah",
+                            "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE",
                             "Koordinator Lapangan Pengamanan"
                         )
                         val userRoles = listOf(
-                            "Chief Foreman", "Foreman", "Dispatcher", // Operational Roles
-                            "Anggota Pengamanan", "Komandan Peleton"  // Security Roles
+                            "Chief Foreman", "Foreman", "Dispatcher",
+                            "Anggota Pengamanan", "Komandan Peleton",
+                            "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah"
                         )
                         var agendaQuery: Query? = null
                         when {
@@ -429,8 +430,7 @@ class HomeActivity : ComponentActivity() {
         var imageUri by remember { mutableStateOf<Uri?>(null) }
         var participantsCount by remember { mutableStateOf(0) }
 
-
-                LaunchedEffect(briefingId) {
+        LaunchedEffect(briefingId) {
             if (briefingId.isNotEmpty()) {
                 val attendanceSnapshot = firestore.collection("agenda")
                     .document(briefingId)

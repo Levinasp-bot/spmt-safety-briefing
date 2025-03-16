@@ -221,7 +221,7 @@ class RegisterActivity : ComponentActivity() {
                     isLoading = true
                     val selectedGroup = if (showGroupDropdown) group else null
                     onRegisterClick(
-                        noEmployee, email, password, name, role, group, terminal, imageUri, faceEmbedding
+                        noEmployee, email, password, name, role, selectedGroup, terminal, imageUri, faceEmbedding
                     )
                 },
                 modifier = Modifier
@@ -362,7 +362,6 @@ class RegisterActivity : ComponentActivity() {
         buffer.rewind()
 
         return buffer
-
     }
 
     private fun registerUser(
@@ -376,22 +375,21 @@ class RegisterActivity : ComponentActivity() {
         imageUri: Uri?,
         faceEmbedding: List<Float>?
     ) {
-
         auth.createUserWithEmailAndPassword(email, password)
             .addOnSuccessListener { authResult ->
                 val userId = authResult.user?.uid ?: return@addOnSuccessListener
-
                 FirebaseMessaging.getInstance().token
                     .addOnCompleteListener { task ->
                         if (!task.isSuccessful) {
                             Log.e("FCM", "Fetching FCM token failed", task.exception)
                             return@addOnCompleteListener
                         }
-
                         val fcmToken = task.result
                         Log.d("FCM", "FCM Token: $fcmToken")
 
-                        // 🔹 Simpan data user termasuk FCM Token ke Firestore
+                        val isManagerOperasi =
+                            role == "Manager Operasi Jamrud" || role == "Manager Operasi Nilam Mirah"
+
                         val userMap = hashMapOf(
                             "userId" to userId,
                             "name" to name,
@@ -401,29 +399,32 @@ class RegisterActivity : ComponentActivity() {
                             "noEmployee" to noEmployee,
                             "terminal" to terminal,
                             "faceEmbedding" to faceEmbedding,
-                            "isApproved" to false,
-                            "fcmToken" to fcmToken // ✅ Simpan token ke Firestore
+                            "isApproved" to isManagerOperasi, // ✅ Jika Manager Operasi, langsung diset True
+                            "fcmToken" to fcmToken
                         )
 
                         FirebaseFirestore.getInstance().collection("users")
                             .document(userId)
                             .set(userMap)
                             .addOnSuccessListener {
-                                Toast.makeText(
-                                    this,
-                                    "Menunggu persetujuan Manager Terminal.",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                val toastMessage = if (isManagerOperasi) {
+                                    "Registrasi Berhasil" // ✅ Jika Manager Operasi
+                                } else {
+                                    "Menunggu persetujuan Manager Terminal."
+                                }
+
+                                Toast.makeText(this, toastMessage, Toast.LENGTH_SHORT).show()
                                 startActivity(Intent(this, LoginActivity::class.java))
                                 finish()
                             }
                             .addOnFailureListener { e ->
-                                Toast.makeText(this, "Gagal menyimpan data: ${e.message}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    this,
+                                    "Gagal menyimpan data: ${e.message}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                     }
-            }
-            .addOnFailureListener { e ->
-                Toast.makeText(this, "Registrasi gagal: ${e.message}", Toast.LENGTH_SHORT).show()
             }
     }
 

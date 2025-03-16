@@ -57,16 +57,26 @@ class FormSafetyBriefingActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            var isLoading by remember { mutableStateOf(false) }
+            val context = LocalContext.current
             FormSafetyBriefingScreen { rawData, imageBitmap ->
                 val data = rawData.toMutableMap() // Konversi ke MutableMap
+                isLoading = true
 
                 if (imageBitmap != null) {
                     uploadImageToCloudinary(imageBitmap) { imageUrl ->
                         data["photoPath"] = imageUrl ?: "" // Pastikan tidak null
-                        saveToFirestore(data)
+                        saveToFirestore(data) { success ->
+                            isLoading = false // 🔹 Matikan loading setelah selesai
+                            if (success) {
+                                Toast.makeText(context, "Data tersimpan", Toast.LENGTH_SHORT).show()
+                                context.startActivity(Intent(context, HomeActivity::class.java))
+                            } else {
+                                Toast.makeText(context, "Gagal menyimpan data", Toast.LENGTH_SHORT)
+                                    .show()
+                            }
+                        }
                     }
-                } else {
-                    saveToFirestore(data)
                 }
             }
         }
@@ -341,7 +351,8 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                     if (imageBitmap == null) {
                         Toast.makeText(context, "Foto dokumentasi kosong", Toast.LENGTH_SHORT).show()
                     } else {
-                        isLoading = true
+                        isLoading = true  // ⬅️ Aktifkan loading sebelum menyimpan data
+
                         val data = mapOf(
                             "terminal" to terminal,
                             "shift" to shift,
@@ -353,24 +364,33 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                             "agenda" to agendaList.map { it.text },
                             "timestamp" to System.currentTimeMillis()
                         )
-                        onSaveData(data, imageBitmap)
-                        isLoading = false
+
+                        // ⬇️ Gunakan try-catch untuk menangani kegagalan penyimpanan
+                        try {
+                            onSaveData(data, imageBitmap)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Gagal menyimpan data: ${e.message}", Toast.LENGTH_SHORT).show()
+                        } finally {
+                            isLoading = false  // ⬅️ Nonaktifkan loading setelah proses selesai
+                        }
                     }
                 },
+                enabled = !isLoading, // ⬅️ Nonaktifkan tombol jika sedang loading
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text("Simpan Data")
-            }
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = Color.White,
-                    strokeWidth = 2.dp
-                )
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Simpan Data")
+                }
             }
         }
     }
@@ -426,7 +446,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
         })
     }
 
-    private fun saveToFirestore(data: MutableMap<String, Any>) {
+    private fun saveToFirestore(data: MutableMap<String, Any>, onResult: (Boolean) -> Unit) {
         val documentRef = firestore.collection("agenda").document()
         data["briefingId"] = documentRef.id
         data["status"] = "aktif"
@@ -437,9 +457,11 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 Toast.makeText(this, "Data tersimpan", Toast.LENGTH_SHORT).show()
                 startActivity(Intent(this, HomeActivity::class.java))
                 finish()
+                onResult(true)
             }
             .addOnFailureListener {
                 Toast.makeText(this, "Gagal menyimpan data", Toast.LENGTH_SHORT).show()
+                onResult(false)
             }
     }
 }
