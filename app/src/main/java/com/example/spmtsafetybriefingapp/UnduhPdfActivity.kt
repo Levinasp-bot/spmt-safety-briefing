@@ -564,7 +564,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
 
                 Spacer(modifier = Modifier.height(4.dp)) // 🔹 Spasi kecil sebelum isi agenda
 
-                // 🔹 Menampilkan daftar agenda jika tersedia
                 agenda?.agenda?.forEachIndexed { index, item ->
                     Text("${index + 1}. $item", fontSize = 8.sp)
                 } ?: Text("- Tidak ada agenda -", fontSize = 7.sp)
@@ -577,7 +576,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 .border(1.dp, Color.Black)
                 .padding(4.dp)
         ) {
-            // 🔹 Kolom 1: Rekap Peserta Safety Briefing
             Box(
                 modifier = Modifier
                     .weight(2f)
@@ -593,7 +591,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 )
             }
 
-            // 🔹 Kolom 2: Hadir
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -605,7 +602,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 Text("Hadir", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 3: Sakit
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -629,7 +625,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 Text("Cuti", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 5: Izin
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -641,7 +636,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 Text("Izin", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 6: Tanpa Keterangan
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -653,9 +647,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
             }
         }
 
-        // 🔹 State untuk menyimpan jumlah pekerja
         var jumlahPekerja by remember { mutableStateOf(0) }
-        var jumlahHadir by remember { mutableStateOf(0) }
         var jumlahSakit by remember { mutableStateOf(0) }
         var jumlahCuti by remember { mutableStateOf(0) }
         var jumlahIzin by remember { mutableStateOf(0) }
@@ -663,7 +655,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
 
         var briefingData by remember { mutableStateOf<Map<String, Any>?>(null) }
 
-        LaunchedEffect(agenda) { // 🔹 Jalankan efek hanya jika agenda berubah
+        LaunchedEffect(agenda) {
             val briefingId = agenda?.briefingId
             if (briefingId == null) {
                 Log.e("FirestoreDebug", "briefingId is null")
@@ -684,7 +676,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                         val selectedTerminal = document.getString("terminal") ?: ""
                         val selectedGroup = document.getString("group") ?: ""
 
-                        // 🔹 Ambil total pekerja berdasarkan terminal & group
                         Firebase.firestore.collection("users")
                             .whereEqualTo("terminal", selectedTerminal)
                             .whereEqualTo("group", selectedGroup)
@@ -693,7 +684,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                                 val totalPekerja = userSnapshot.size()
                                 Log.d("FirestoreDebug", "Total pekerja di terminal $selectedTerminal dan group $selectedGroup: $totalPekerja")
 
-                                // 🔹 Ambil jumlah pekerja yang hadir
                                 Firebase.firestore.collection("agenda")
                                     .document(briefingId)
                                     .collection("attendance")
@@ -722,15 +712,12 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 }
         }
 
-
-// 🔹 Row dengan 6 kolom
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .border(1.dp, Color.Black)
                 .padding(4.dp)
         ) {
-            // 🔹 Kolom 1: Jumlah Pekerja (orang)
             Box(
                 modifier = Modifier
                     .weight(2f)
@@ -745,7 +732,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 )
             }
 
-            // 🔹 Kolom 2: Ambil jumlah pekerja dari sub-koleksi attendance
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -756,7 +742,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 Text("$jumlahPekerja", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 3: Izin
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -767,7 +752,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 Text("$jumlahIzin", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 4: Sakit
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -778,7 +762,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 Text("$jumlahSakit", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 5: Cuti
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -789,7 +772,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 Text("$jumlahCuti", fontSize = 8.sp, textAlign = TextAlign.Center)
             }
 
-            // 🔹 Kolom 6: Tanpa Keterangan
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -821,7 +803,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     if (document != null && document.exists()) {
                         Log.d("FirestoreDebug", "Data agenda ditemukan: ${document.data}")
 
-                        // 🔹 Ambil nama pekerja berdasarkan kategori
                         namaSakit = (document["sakit"] as? List<String>) ?: emptyList()
                         namaCuti = (document["cuti"] as? List<String>) ?: emptyList()
                         namaIzin = (document["izin"] as? List<String>) ?: emptyList()
@@ -836,8 +817,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 }
         }
 
-
-        // 🔹 Nama Pekerja Sakit
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -882,7 +861,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 .border(1.dp, Color.Black)
                 .padding(4.dp)
         ) {
-            // 🔹 Kolom 1: Nama Pekerja Sakit
             Box(
                 modifier = Modifier
                     .weight(2f)
@@ -897,7 +875,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     textAlign = TextAlign.Left
                 )
             }
-            // 🔹 Kolom 2: Kosong
             Box(
                 modifier = Modifier
                     .weight(4f)
@@ -920,7 +897,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 .border(1.dp, Color.Black)
                 .padding(4.dp)
         ) {
-            // 🔹 Kolom 1: Nama Pekerja Sakit
             Box(
                 modifier = Modifier
                     .weight(2f)
@@ -935,7 +911,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     textAlign = TextAlign.Left
                 )
             }
-            // 🔹 Kolom 2: Kosong
             Box(
                 modifier = Modifier
                     .weight(4f)
@@ -1089,21 +1064,18 @@ fun UnduhPdfScreen(briefingId: String) {
                 isLoading = false
             }
     }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 28.dp, top = 10.dp, end = 28.dp) // Atur padding atas, kanan, kiri
+            .padding(start = 28.dp, top = 10.dp, end = 28.dp)
             .background(Color.White)
     ) {
-        // 🔹 Header dengan 3 Kolom
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min), // ✅ Menyesuaikan tinggi Row dengan kontennya
+                .height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 🔹 Kolom 1: Logo
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -1117,13 +1089,11 @@ fun UnduhPdfScreen(briefingId: String) {
                     painter = painterResource(id = R.drawable.logo_spmt),
                     contentDescription = "Logo SPMT",
                     modifier = Modifier
-                        .width(90.dp) // Atur lebar
-                        .height(30.dp) // Atur tinggi
+                        .width(90.dp)
+                        .height(30.dp)
                 )
 
             }
-
-            // 🔹 Kolom 2: Judul
             Box(
                 modifier = Modifier
                     .weight(1.5f)
@@ -1162,13 +1132,11 @@ fun UnduhPdfScreen(briefingId: String) {
                 )
             }
         }
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min) // Pastikan tinggi semua kolom sejajar
         ) {
-            // 🔹 Kolom 1: Hari / Tanggal
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -1203,7 +1171,6 @@ fun UnduhPdfScreen(briefingId: String) {
                 )
             }
 
-            // 🔹 Kolom 3: Shift
             Box(
                 modifier = Modifier
                     .weight(0.75f)
@@ -1222,7 +1189,6 @@ fun UnduhPdfScreen(briefingId: String) {
                 )
             }
 
-            // 🔹 Kolom 4: Tempat (Terminal)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -1237,7 +1203,6 @@ fun UnduhPdfScreen(briefingId: String) {
                 )
             }
         }
-        // 🔹 Row untuk Perwira Briefing & Koordinator
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1341,7 +1306,6 @@ fun UnduhPdfScreen(briefingId: String) {
                 )
             }
 
-            // 🔹 Kolom 2: Informasi Safety Briefing
             Box(
                 modifier = Modifier
                     .weight(15f)
@@ -1403,7 +1367,7 @@ fun UnduhPdfScreen(briefingId: String) {
                 .border(1.dp, Color.Black)
                 .padding(4.dp)
         ) {
-            // 🔹 Kolom 1: MATERI YANG DISAMPAIKAN
+
             Column(
                 modifier = Modifier
                     .weight(2f)
@@ -1425,24 +1389,22 @@ fun UnduhPdfScreen(briefingId: String) {
                 Text("5. Operation", fontSize = 7.sp)
             }
 
-            // 🔹 Kolom 2: Dokumentasi (dibagi menjadi 2 row)
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .border(1.dp, Color.Black)
                     .padding(4.dp)
             ) {
-                // 🔹 Row 1: Judul DOKUMENTASI
+
                 Text(
                     "DOKUMENTASI:",
                     fontSize = 8.sp,
                     fontWeight = FontWeight.Bold
                 )
 
-                // 🔹 Row 2: Menampilkan Gambar
                 Box(
                     modifier = Modifier
-                        .weight(2f) // ✅ Sesuai dengan perbandingan 1:5
+                        .weight(2f)
                         .fillMaxHeight()
                         .fillMaxWidth()
                         .border(1.dp, Color.Gray),

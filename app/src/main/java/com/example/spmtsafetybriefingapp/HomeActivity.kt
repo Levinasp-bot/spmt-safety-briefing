@@ -175,7 +175,7 @@ class HomeActivity : ComponentActivity() {
                         val userGroup = userDoc.getString("group") ?: ""
 
                         val allowedRoles = listOf(
-                            "Brach Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
+                            "Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
                             "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE",
                             "Koordinator Lapangan Pengamanan"
                         )
@@ -312,7 +312,28 @@ class HomeActivity : ComponentActivity() {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    if (userRole in listOf("Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah")) {
+                                    val allowedRoles = listOf(
+                                        "Koordinator Operasi Jamrud",
+                                        "Koordinator Operasi Nilam",
+                                        "Koordinator Operasi Mirah"
+                                    )
+
+                                    val allowedNames = listOf(
+                                        "Eko Mardiyanto",
+                                        "Nanang Iswahyudi",
+                                        "Irawan",
+                                        "Agus Dwi Susanto",
+                                        "Mohammad Samsul Syamsuri",
+                                        "Achmad Zakaria",
+                                        "Moh.Hasan Arif",
+                                        "Suwito Mulyo",
+                                        "Agus Tribusono",
+                                        "Hari Murtiantoro",
+                                        "Sugiono",
+                                        "Herwanto"
+                                    )
+
+                                    if (userRole in allowedRoles || userName in allowedNames) {
                                         Image(
                                             painter = painterResource(id = R.drawable.ic_action_name),
                                             contentDescription = "Tambah Briefing",
@@ -321,6 +342,7 @@ class HomeActivity : ComponentActivity() {
                                                 .clickable { onAddBriefingClick() }
                                         )
                                     }
+
                                     Text(text = "Tidak ada safety briefing aktif", color = Color.Gray, fontSize = 14.sp)
                                 }
                             }

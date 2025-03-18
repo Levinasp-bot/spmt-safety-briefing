@@ -211,7 +211,6 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 }
             }
 
-// 🔹 Dropdown untuk pekerja cuti
             Column {
                 Text("Nama Pekerja Cuti")
                 selectedCuti.forEachIndexed { index, name ->
@@ -243,7 +242,6 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 }
             }
 
-// 🔹 Dropdown untuk pekerja izin
             Column {
                 Text("Nama Pekerja Izin")
                 selectedIzin.forEachIndexed { index, name ->
@@ -326,7 +324,6 @@ class FormSafetyBriefingActivity : ComponentActivity() {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 🔹 Dokumentasi Foto
             imageBitmap?.let { bitmap ->
                 Image(
                     painter = remember { BitmapPainter(bitmap.asImageBitmap()) },
@@ -374,18 +371,31 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                     if (imageBitmap == null) {
                         Toast.makeText(context, "Foto dokumentasi kosong", Toast.LENGTH_SHORT).show()
                     } else {
-                        isLoading = true  // ⬅️ Aktifkan loading sebelum menyimpan data
+                        isLoading = true
 
-                        val koordinator = if (terminal == "Terminal Jamrud") {
-                            when (group) {
+                        val koordinator = when (terminal) {
+                            "Terminal Jamrud" -> when (group) {
                                 "Group A" -> "Rahmad Arif Nurcahyo"
                                 "Group B" -> "M.Yusuf"
                                 "Group C" -> "Darman"
                                 "Group D" -> "Umar Hotob"
                                 else -> "Tidak diketahui"
                             }
-                        } else {
-                            "Tidak diketahui"
+                            "Terminal Mirah" -> when (group) {
+                                "Group A" -> "Asrul Edong"
+                                "Group B" -> "Judik Agus Setiawan"
+                                "Group C" -> "Yuli Kurinuda Pristiawan"
+                                "Group D" -> "Anwar Sanusi"
+                                else -> "Tidak diketahui"
+                            }
+                            "Terminal Nilam" -> when (group) {
+                                "Group A" -> "Novem Afrianto"
+                                "Group B" -> "Rudi Hariyonon"
+                                "Group C" -> "Hendra Surya"
+                                "Group D" -> "Sugeng Setiawan"
+                                else -> "Tidak diketahui"
+                            }
+                            else -> "Tidak diketahui"
                         }
 
                         val data = mapOf(
@@ -411,7 +421,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                         }
                     }
                 },
-            enabled = !isLoading, // ⬅️ Nonaktifkan tombol jika sedang loading
+            enabled = !isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -501,7 +511,6 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
