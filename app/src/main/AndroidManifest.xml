@@ -111,6 +111,11 @@
             android:theme="@style/Theme.SPMTSafetyBriefingApp" />
 
         <activity
+            android:name=".UnduhAbsensiActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SPMTSafetyBriefingApp" />
+
+        <activity
             android:name=".PendingApprovalActivity"
             android:exported="true"
             android:theme="@style/Theme.SPMTSafetyBriefingApp" />

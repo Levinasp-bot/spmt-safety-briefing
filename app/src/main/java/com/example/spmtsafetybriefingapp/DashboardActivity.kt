@@ -67,6 +67,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -119,12 +120,12 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
     val context = LocalContext.current
     var agenda by remember { mutableStateOf<Agenda_detail?>(null) }
     val activity = context as? ComponentActivity
-    var attendanceList by remember { mutableStateOf(listOf<Pair<String, String>>()) }
-    var selectedTerminal by remember { mutableStateOf("Semua Terminal") }
-    var selectedShift by remember { mutableStateOf("Semua Shift") }
+    var attendanceList by rememberSaveable { mutableStateOf(listOf<Pair<String, String>>()) }
+    var selectedTerminal by rememberSaveable { mutableStateOf("Semua Terminal") }
+    var selectedShift by rememberSaveable { mutableStateOf("Semua Shift") }
     val terminalOptions =
         listOf("Semua Terminal", "Terminal Jamrud", "Terminal Nilam", "Terminal Mirah")
-    var selectedDate by remember {
+    var selectedDate by rememberSaveable {
         mutableStateOf(
             SimpleDateFormat(
                 "dd/MM/yyyy",
@@ -133,14 +134,14 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
         )
     }
     var datePickerDialogVisible by remember { mutableStateOf(false) }
-    var totalUsers by remember { mutableStateOf(0) }
-    var absentUsers by remember { mutableStateOf(0) }
-    var presentUsers by remember { mutableStateOf(0) }
-    var cutiList by remember { mutableStateOf(setOf<String>()) }
-    var sakitList by remember { mutableStateOf(setOf<String>()) }
-    var izinList by remember { mutableStateOf(setOf<String>()) }
-    var filteredUsers by remember { mutableStateOf(emptyList<String>()) }
-    var briefingId by remember { mutableStateOf<String?>(null) }
+    var totalUsers by rememberSaveable { mutableStateOf(0) }
+    var absentUsers by rememberSaveable { mutableStateOf(0) }
+    var presentUsers by rememberSaveable { mutableStateOf(0) }
+    var cutiList by rememberSaveable { mutableStateOf(setOf<String>()) }
+    var sakitList by rememberSaveable { mutableStateOf(setOf<String>()) }
+    var izinList by rememberSaveable { mutableStateOf(setOf<String>()) }
+    var filteredUsers by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var briefingId by rememberSaveable { mutableStateOf<String?>(null) }
     val scaffoldState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
 
@@ -704,7 +705,24 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
                  //
                 Button(
                     onClick = {
-                        activity?.let { generatePdf(it) }
+                        activity?.let {
+                            val intent = Intent(it, UnduhAbsensiActivity::class.java).apply {
+                                putExtra("selectedTerminal", selectedTerminal)
+                                putExtra("selectedShift", selectedShift)
+                                putExtra("selectedDate", selectedDate)
+                                putExtra("totalUsers", totalUsers)
+                                putExtra("absentUsers", absentUsers)
+                                putExtra("presentUsers", presentUsers)
+                                putStringArrayListExtra("cutiList", ArrayList(cutiList))
+                                putStringArrayListExtra("sakitList", ArrayList(sakitList))
+                                putStringArrayListExtra("izinList", ArrayList(izinList))
+                                putStringArrayListExtra("filteredUsers", ArrayList(filteredUsers))
+                                putExtra("briefingId", briefingId)
+                                val attendanceListString = attendanceList.map { "${it.first} - ${it.second}" } as ArrayList<String>
+                                putStringArrayListExtra("attendanceList", attendanceListString)
+                            }
+                            it.startActivity(intent)
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
