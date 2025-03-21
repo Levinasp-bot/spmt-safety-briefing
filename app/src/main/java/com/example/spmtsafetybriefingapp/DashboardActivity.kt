@@ -82,7 +82,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -185,14 +187,12 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
                 "Fetching agendas for terminal: $selectedTerminal on date: $selectedDate with shift: $selectedShift"
             )
 
-            // 🔹 RESET DATA SEBELUM FETCH
             attendanceList = emptyList()
             presentUsers = 0
             totalUsers = 0
             absentUsers = 0
             filteredUsers = emptyList()
 
-            // 🔹 Konversi tanggal ke Timestamp Firestore
             val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
             val selectedDateStart = sdf.parse(selectedDate) ?: return@LaunchedEffect
             val calendar = Calendar.getInstance().apply {
@@ -204,24 +204,32 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
             val startTimestamp = Timestamp(selectedDateStart)
             val endTimestamp = Timestamp(selectedDateEnd)
 
-            // 🔹 Query agenda berdasarkan tanggal
             var query = firestore.collection("agenda")
                 .whereGreaterThanOrEqualTo("timestamp", startTimestamp)
                 .whereLessThan("timestamp", endTimestamp)
 
+            // Jika shift dipilih, tambahkan filter shift
             if (!selectedShift.isNullOrEmpty() && selectedShift != "Semua Shift") {
                 query = query.whereEqualTo("shift", selectedShift)
             } else {
                 Log.d("Firestore", "No shift filter applied, fetching all shifts")
             }
 
+// Jika terminal spesifik dipilih, tambahkan filter terminal
+            if (!selectedTerminal.isNullOrEmpty() && selectedTerminal != "Semua Terminal") {
+                query = query.whereEqualTo("terminal", selectedTerminal)
+            } else {
+                Log.d("Firestore", "No terminal filter applied, fetching all terminals")
+            }
+
             val allAgendas = query.get().await().documents
+
             if (allAgendas.isEmpty()) {
-                Log.d("Firestore", "No matching agendas found for shift: $selectedShift")
+                Log.d("Firestore", "⚠ No matching agendas found for shift: $selectedShift and terminal: $selectedTerminal")
                 return@LaunchedEffect
             }
 
-            // 🔹 Log Data Shift untuk Debug
+
             allAgendas.forEach { agenda ->
                 Log.d(
                     "Firestore",
@@ -231,13 +239,11 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
                 )
             }
 
-            // 🔹 Ambil terminal & group dari agenda
             val terminalsFromAgenda = allAgendas.mapNotNull { it.getString("terminal") }.distinct()
             val groupsFromAgenda = allAgendas.mapNotNull { it.getString("group") }.distinct()
             Log.d("Firestore", "Terminals found in agenda: $terminalsFromAgenda")
             Log.d("Firestore", "Groups found in agenda: $groupsFromAgenda")
 
-            // 🔹 Pastikan hanya terminal yang benar digunakan
             val validTerminals =
                 if (selectedTerminal == "Semua Terminal") terminalsFromAgenda else listOf(
                     selectedTerminal
@@ -251,7 +257,6 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
             val attendedUsers = mutableSetOf<String>()
             val allAttendances = mutableListOf<Pair<String, String>>()
 
-            // 🔹 Ambil data absensi hanya dari agenda yang valid
             allAgendas.forEach { agenda ->
                 val briefingId = agenda.id
                 val agendaTerminal = agenda.getString("terminal") ?: ""
@@ -279,33 +284,45 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
                 allAttendances.addAll(attendances)
             }
 
-            // 🔹 Ambil data user hanya dari terminal & group yang benar
-            val userQueries = terminalBatches.map { batch ->
-                async {
-                    firestore.collection("users")
-                        .whereIn("terminal", batch)
-                        .whereIn("group", groupsFromAgenda) // 🔹 Pastikan group juga sesuai
-                        .whereIn(
-                            "role", listOf(
-                                "Anggota Pengamanan",
-                                "Komandan Peleton",
-                                "Koordinator Operasi Jamrud",
-                                "Koordinator Operasi Nilam",
-                                "Koordinator Operasi Mirah",
-                                "Chief Foreman",
-                                "Foreman",
-                                "Dispatcher"
-                            )
-                        )
-                        .get()
-                        .await()
-                        .documents
-                }
+            val terminalChunks = validTerminals.chunked(10)  // Maksimal 10 per batch
+            val groupChunks = groupsFromAgenda.chunked(10)  // Maksimal 10 per batch
+
+            val userDocs = try {
+                firestore.collection("users")
+                    .limit(100) // Tambahkan limit lebih besar dari jumlah user yang ada
+                    .get()
+                    .await()
+                    .documents
+            } catch (e: FirebaseFirestoreException) {
+                Log.e("Firestore", "Error fetching users: ${e.message}")
+                emptyList()
             }
 
-            val allUsers = userQueries.awaitAll().flatten()
+            val groupsByTerminal = allAgendas.groupBy(
+                { it.getString("terminal") ?: "" },  // Kunci: Terminal
+                { it.getString("group") ?: "" }      // Nilai: Group
+            ).mapValues { it.value.distinct() }  // Hilangkan duplikasi dalam setiap terminal
 
-            // 🔹 Filter pengguna sesuai dengan agenda
+            val allUsers = userDocs.filter { doc ->
+                val userTerminal = doc.getString("terminal") ?: ""
+                val userGroup = doc.getString("group") ?: ""
+                val role = doc.getString("role") ?: ""
+
+                val validGroups = groupsByTerminal[userTerminal] ?: emptyList()
+
+                userTerminal in validTerminals &&
+                        userGroup in validGroups &&
+                        role in listOf(
+                    "Anggota Pengamanan",
+                    "Operasional",
+                    "Komandan Peleton",
+                    "Koordinator Lapangan Pengamanan",
+                    "Koordinator Operasi Jamrud",
+                    "Koordinator Operasi Nilam",
+                    "Koordinator Operasi Mirah"
+                )
+            }
+
             filteredUsers = allUsers.filter { doc ->
                 val userTerminal = doc.getString("terminal") ?: ""
                 val userGroup = doc.getString("group") ?: ""
@@ -557,8 +574,9 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
                             modifier = Modifier.padding(top = 8.dp)
                         )
                     } else {
-                        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                            // **Header tabel**
+                        LazyColumn(modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom=125.dp)) {
                             item {
                                 Row(
                                     modifier = Modifier
@@ -636,7 +654,7 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
                                     ) {
                                         Text(
                                             text = "${index + 1}",
-                                            fontSize = 14.sp,
+                                            fontSize = 12.sp,
                                             modifier = Modifier.weight(0.2f).padding(start = 8.dp)
                                         )
                                         Text(
@@ -677,6 +695,7 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
                     }
                 }
             }
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -763,8 +782,11 @@ fun PdfLayout() {
     var filteredUsers by remember { mutableStateOf(emptyList<String>()) }
     var briefingId by remember { mutableStateOf<String?>(null) }
 
-    LazyColumn(modifier = Modifier.fillMaxWidth()) {
-        // **Header tabel**
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp) // Tambahkan margin bawah
+    ) {
         item {
             Row(
                 modifier = Modifier
@@ -949,7 +971,6 @@ fun saveBitmap(activity: ComponentActivity, bitmap: Bitmap) {
 
     Toast.makeText(activity, "PDF berhasil disimpan di ${file.absolutePath}", Toast.LENGTH_LONG).show()
 }
-
 
 @Composable
 fun BottomNavigationBarDashboard() {

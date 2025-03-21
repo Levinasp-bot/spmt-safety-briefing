@@ -38,6 +38,10 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -390,7 +394,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                             }
                             "Terminal Nilam" -> when (group) {
                                 "Group A" -> "Novem Afrianto"
-                                "Group B" -> "Rudi Hariyonon"
+                                "Group B" -> "Rudi Hariyono"
                                 "Group C" -> "Hendra Surya"
                                 "Group D" -> "Sugeng Setiawan"
                                 else -> "Tidak diketahui"
@@ -412,16 +416,26 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                             "timestamp" to System.currentTimeMillis()
                         )
 
-                        try {
-                            onSaveData(data, imageBitmap)
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Gagal menyimpan data: ${e.message}", Toast.LENGTH_SHORT).show()
-                        } finally {
-                            isLoading = false  // ⬅️ Nonaktifkan loading setelah proses selesai
+                        // Gunakan coroutine untuk menjalankan proses penyimpanan di background thread
+                        CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                onSaveData(data, imageBitmap)
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "Menyimpan Agenda...", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "Gagal menyimpan data: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            } finally {
+                                withContext(Dispatchers.Main) {
+                                    isLoading = true
+                                }
+                            }
                         }
                     }
                 },
-            enabled = !isLoading,
+                enabled = !isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),

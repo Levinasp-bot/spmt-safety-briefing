@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "SPMT Safety Briefing App"
 include(":app")
+include(":shared")

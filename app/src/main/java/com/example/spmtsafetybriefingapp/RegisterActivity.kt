@@ -17,7 +17,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
@@ -44,6 +46,8 @@ import java.nio.ByteOrder
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.text.input.VisualTransformation
+import kotlinx.coroutines.tasks.await
+
 
 class RegisterActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
@@ -123,7 +127,8 @@ class RegisterActivity : ComponentActivity() {
         }
 
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(16.dp)
+            .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(text = "Daftar", fontSize = 24.sp, color = primaryColor)
@@ -209,7 +214,7 @@ class RegisterActivity : ComponentActivity() {
                 shape = RoundedCornerShape(8.dp),
                 border = BorderStroke(2.dp, Color(0xFF0E73A7))
             ) {
-                Text(text = "Ambil Foto", color = Color(0xFF0E73A7))
+                Text(text = "Ambil Foto Wajah", color = Color(0xFF0E73A7))
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -218,8 +223,27 @@ class RegisterActivity : ComponentActivity() {
                 Image(painter = rememberImagePainter(it), contentDescription = "User Image", modifier = Modifier.size(100.dp))
             }
 
+            var usersExceptionList by remember { mutableStateOf<List<String>>(emptyList()) }
+            var nippUser by remember { mutableStateOf("") }  // ✅ Tambahkan state untuk menyimpan NIPP pengguna
+
+            LaunchedEffect(Unit) {
+                try {
+                    val exceptionDocs = firestore.collection("usersException").get().await()
+                    usersExceptionList = exceptionDocs.documents.mapNotNull { it.getString("nipp") }
+                } catch (e: Exception) {
+                    Log.e("Firestore", "Error fetching usersException: ${e.message}")
+                }
+            }
+
             Button(
                 onClick = {
+                    val isUserException = nippUser in usersExceptionList // Cek apakah NIPP ada di daftar pengecualian
+
+                    if (imageUri == null && !isUserException) {
+                        Toast.makeText(context, "Foto wajah belum diambil", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+
                     isLoading = true
                     val selectedGroup = if (showGroupDropdown) group else null
                     onRegisterClick(
@@ -401,7 +425,7 @@ class RegisterActivity : ComponentActivity() {
                             "noEmployee" to noEmployee,
                             "terminal" to terminal,
                             "faceEmbedding" to faceEmbedding,
-                            "isApproved" to isManagerOperasi, // ✅ Jika Manager Operasi, langsung diset True
+                            "isApproved" to isManagerOperasi,
                             "fcmToken" to fcmToken
                         )
 
