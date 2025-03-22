@@ -506,19 +506,18 @@ class HomeActivity : ComponentActivity() {
                     Log.d("Firestore", "User Login: ID=$userId, Role=$userRole, Group=$userGroup")
 
                     val agendaDoc = firestore.collection("agenda").document(briefingId).get().await()
-                    val group = agendaDoc.getString("group") ?: ""
+                    val agendaGroup = agendaDoc.getString("group") ?: ""
 
-                    Log.d("Firestore", "Agenda Groups -> $group")
+                    Log.d("Firestore", "Agenda Group -> $agendaGroup")
 
                     val validRoles = listOf(
                         "Anggota Pengamanan", "Operasional", "Komandan Peleton",
                         "Koordinator Operasi Jamrud", "Koordinator Operasi Mirah", "Koordinator Operasi Nilam"
                     )
 
-                    val userQuery = firestore.collection("users")
-                        .whereEqualTo("terminal", terminal) // 🔹 Hanya filter terminal
-
-                    val usersSnapshot = userQuery.get().await()
+                    val usersSnapshot = firestore.collection("users")
+                        .whereEqualTo("terminal", terminal)
+                        .get().await()
 
                     Log.d("Firestore", "Total Users di Terminal [$terminal]: ${usersSnapshot.size()}")
 
@@ -526,15 +525,14 @@ class HomeActivity : ComponentActivity() {
                         val role = doc.getString("role") ?: ""
                         val group = doc.getString("group") ?: ""
 
-                        val isValid = when (role) {
-                            "Anggota Pengamanan", "Operasional", "Komandan Peleton",
-                            "Koordinator Operasi Jamrud", "Koordinator Operasi Mirah", "Koordinator Operasi Nilam" ->
-                                role in validRoles  && userGroup == group
-                            else -> false
-                        }
+                        Log.d("Firestore", "Cek User: ID=${doc.id}, Role=$role, Group=$group, UserGroup=$userGroup")
+
+                        val isValid = role in validRoles && group == agendaGroup
 
                         if (isValid) {
                             Log.d("Firestore", "User Valid: ID=${doc.id}, Role=$role, Group=$group")
+                        } else {
+                            Log.d("Firestore", "User Tidak Valid: ID=${doc.id}, Role=$role, Group=$group")
                         }
 
                         isValid
@@ -543,10 +541,11 @@ class HomeActivity : ComponentActivity() {
                     maxParticipants = filteredUsers.size
                     Log.d("Firestore", "Total Participants yang Valid: $maxParticipants")
                 } catch (e: Exception) {
-                    Log.e("Firestore", "Gagal mengambil data pengguna", e)
+                    Log.e("Firestore", "Gagal mengambil data pengguna: ${e.localizedMessage}", e)
                 }
             }
         }
+
 
         LaunchedEffect(userId) {
             if (userId.isNotEmpty()) {

@@ -18,8 +18,8 @@ android {
         applicationId = "com.example.spmtsafetybriefingapp"
         minSdk = 24
         targetSdk = 35
-        versionCode = 7
-        versionName = "2.3"
+        versionCode = 8
+        versionName = "2.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
