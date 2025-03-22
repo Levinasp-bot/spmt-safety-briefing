@@ -1116,7 +1116,7 @@ fun UnduhPdfScreen(briefingId: String) {
                     .weight(1f)
                     .border(1.dp, Color.Black)
                     .fillMaxHeight()
-                    .padding(4.dp) // ✅ Padding lebih kecil
+                    .padding(4.dp)
                     .align(Alignment.CenterVertically), // ✅ Agar sejajar dengan lainnya
                 verticalArrangement = Arrangement.spacedBy(4.dp) // ✅ Jarak antar teks lebih proporsional
             ) {

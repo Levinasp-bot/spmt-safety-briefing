@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
@@ -17,9 +18,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.LayoutInflater
 import android.view.PixelCopy
-import android.view.View
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.ComponentDialog
@@ -59,8 +58,14 @@ import java.util.Date
 import java.util.Locale
 import android.graphics.Rect
 import android.os.Build
+import android.view.View
+import android.view.ViewGroup
 import androidx.annotation.RequiresApi
 import com.google.firebase.firestore.ListenerRegistration
+import android.view.ViewTreeObserver
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import androidx.compose.ui.unit.TextUnit
 
 class UnduhAbsensiActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
@@ -97,9 +102,9 @@ class UnduhAbsensiActivity : ComponentActivity() {
                 absentUsers = absentUsers,
                 presentUsers = presentUsers,
                 briefingId = briefingId,
-                cutiList = cutiList,
-                sakitList = sakitList,
-                izinList = izinList,
+                cutiList = cutiList.toSet(),   // ✅ Konversi ke Set<String>
+                sakitList = sakitList.toSet(), // ✅ Konversi ke Set<String>
+                izinList = izinList.toSet(),
                 filteredUsers = filteredUsers,
                 attendanceList = attendanceList
             )
@@ -107,83 +112,212 @@ class UnduhAbsensiActivity : ComponentActivity() {
     }
 }
 
-
 @RequiresApi(Build.VERSION_CODES.O)
-fun generatePdfAbsensi(activity: ComponentActivity, agenda: Agenda_detail?) {
-    if (agenda == null) {
-        Toast.makeText(activity, "Data agenda tidak tersedia", Toast.LENGTH_SHORT).show()
-        return
-    }
-
-    val dialog = ComponentDialog(activity)
+fun generatePdf(
+    activity: ComponentActivity,
+    selectedTerminal: String,
+    selectedShift: String,
+    selectedDate: String,
+    totalUsers: Int,
+    absentUsers: Int,
+    presentUsers: Int,
+    briefingId: String,
+    cutiList: Set<String>,
+    sakitList: Set<String>,
+    izinList: Set<String>,
+    filteredUsers: List<String>,
+    attendanceList: List<Pair<String, String>>
+) {
     val pdfComposeView = ComposeView(activity).apply {
         setContent {
-            PdfLayoutScreen(agenda) // Render layout tanpa tombol
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                // 🔹 Header Laporan
+                Text(
+                    text = "Laporan Absensi Safety Briefing",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // 🔹 Informasi Terminal, Shift, dan Tanggal
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    InfoRow("Terminal:", selectedTerminal, fontSize = 10.sp)
+                    InfoRow("Shift:", selectedShift, fontSize = 10.sp)
+                    InfoRow("Tanggal:", selectedDate, fontSize = 10.sp)
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // 🔹 Tabel Absensi
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, Color.Black)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Gray)
+                            .padding(2.dp)
+                    ) {
+                        TableCell("No", 0.2f, Color.White, true, fontSize = 10.sp)
+                        DividerVertikal()
+                        TableCell("Nama", 1f, Color.White, true, fontSize = 10.sp)
+                        DividerVertikal()
+                        TableCell("Waktu", 0.8f, Color.White, true, fontSize = 10.sp)
+                        DividerVertikal()
+                        TableCell("Keterangan", 1f, Color.White, true, fontSize = 10.sp)
+                    }
+                    Divider(color = Color.Black, thickness = 1.dp)
+
+                    filteredUsers.sorted().forEachIndexed { index, name ->
+                        val attendance = attendanceList.find { it.first == name }
+                        val timestamp = attendance?.second ?: "-"
+                        val status = when {
+                            name in cutiList -> "Cuti"
+                            name in sakitList -> "Sakit"
+                            name in izinList -> "Izin"
+                            attendance != null -> "Hadir"
+                            else -> "Tanpa Keterangan"
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 1.dp)
+                        ) {
+                            TableCell("${index + 1}", 0.2f, fontSize = 10.sp)
+                            DividerVertikal()
+                            TableCell(name, 1f, fontSize = 10.sp)
+                            DividerVertikal()
+                            TableCell(timestamp, 0.8f, textColor = Color.Gray, fontSize = 10.sp)
+                            DividerVertikal()
+                            TableCell(status, 1f, textColor = if (status == "Hadir") Color.Green else Color.Red, fontSize = 10.sp)
+                        }
+                        Divider(color = Color.LightGray, thickness = 0.8.dp)
+                    }
+                }
+            }
         }
     }
 
+    val dialog = ComponentDialog(activity)
     dialog.setContentView(pdfComposeView)
-    dialog.window?.setLayout(1080, 1920)
+    dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     dialog.show()
 
-    Handler(Looper.getMainLooper()).postDelayed({
-        val bitmap = Bitmap.createBitmap(1080, 1920, Bitmap.Config.ARGB_8888)
+    pdfComposeView.viewTreeObserver.addOnGlobalLayoutListener(
+        object : ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                pdfComposeView.viewTreeObserver.removeOnGlobalLayoutListener(this)
 
-        val location = IntArray(2)
-        pdfComposeView.getLocationInWindow(location)
+                // 🔥 Ukur ulang tinggi supaya seluruh konten tertangkap
+                pdfComposeView.measure(
+                    View.MeasureSpec.makeMeasureSpec(pdfComposeView.width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED) // 🚀 Ambil seluruh tinggi
+                )
+                pdfComposeView.layout(0, 0, pdfComposeView.measuredWidth, pdfComposeView.measuredHeight)
 
-        val window = activity.window
-        val handler = Handler(Looper.getMainLooper())
+                val width = pdfComposeView.measuredWidth
+                val height = pdfComposeView.measuredHeight
 
-        PixelCopy.request(
-            window,
-            Rect(location[0], location[1], location[0] + pdfComposeView.width, location[1] + pdfComposeView.height),
-            bitmap,
-            { copyResult ->
-                if (copyResult == PixelCopy.SUCCESS) {
-                    saveBitmapAsPdf(activity, bitmap, agenda)
+                if (width > 0 && height > 0) {
+                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(bitmap)
+                    pdfComposeView.draw(canvas)
+
+                    saveBitmap(activity, bitmap, filteredUsers.size)
                 } else {
-                    Toast.makeText(activity, "Gagal mengambil tangkapan layar", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(activity, "Gagal mengambil konten", Toast.LENGTH_SHORT).show()
                 }
+
                 dialog.dismiss()
-            },
-            handler
-        )
-    }, 500) // Tunggu 500ms agar rendering selesai
+            }
+        }
+    )
 }
 
-fun saveBitmapAbsensi(activity: ComponentActivity, bitmap: Bitmap, agenda: Agenda_detail) {
-    val pageHeight = 1800  // Tinggi konten per halaman (sebelum margin)
-    val marginTop = 100     // Margin atas untuk halaman kedua dan seterusnya
-    val marginBottom = 100  // Margin bawah untuk semua halaman
-    val totalHeight = bitmap.height
+@Composable
+fun InfoRow(label: String, value: String, fontSize: TextUnit = 10.sp) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Start
+    ) {
+        Text(
+            text = label,
+            fontSize = fontSize, // ✅ Menggunakan fontSize
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = value,
+            fontSize = fontSize // ✅ Sama, menggunakan fontSize yang bisa dikustomisasi
+        )
+    }
+}
+
+fun saveBitmap(activity: ComponentActivity, bitmap: Bitmap, totalRows: Int) {
+    val pageWidth = 720
+    val pageHeight = 1280
+    val topPadding = 50
+    val contentHeight = 1650
+
     val pdfDocument = PdfDocument()
+
+    val maxScaleFactor = minOf(
+        pageWidth.toFloat() / bitmap.width.toFloat(),
+        contentHeight.toFloat() / bitmap.height.toFloat()
+    )
+
+    val scalePercentage = 0.96f
+    val finalScaleFactor = maxScaleFactor * scalePercentage
+
+    val scaledWidth = (bitmap.width * finalScaleFactor).toInt()
+    val scaledHeight = (bitmap.height * finalScaleFactor).toInt()
 
     var yOffset = 0
     var pageNumber = 1
 
-    while (yOffset < totalHeight) {
-        val isFirstPage = (pageNumber == 1)
-        val heightToCopy = minOf(pageHeight - if (isFirstPage) marginBottom else marginTop, totalHeight - yOffset)
+    while (yOffset < bitmap.height) {
+        val remainingHeight = bitmap.height - yOffset
+        val heightToCopy = minOf(remainingHeight, contentHeight)
 
-        if (heightToCopy <= 0) break
-
-        val pageBitmap = Bitmap.createBitmap(bitmap, 0, yOffset, bitmap.width, heightToCopy)
-
-        val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, pageHeight, pageNumber).create()
+        val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
         val page = pdfDocument.startPage(pageInfo)
         val pdfCanvas = page.canvas
 
-        val yOffsetCanvas = if (isFirstPage) 0f else marginTop.toFloat()
-        pdfCanvas.drawBitmap(pageBitmap, 0f, yOffsetCanvas, null)
+        pdfCanvas.drawColor(android.graphics.Color.WHITE)
+
+        val partBitmap = Bitmap.createBitmap(bitmap, 0, yOffset, bitmap.width, heightToCopy)
+
+        val matrix = Matrix().apply {
+            postScale(finalScaleFactor, finalScaleFactor)
+            postTranslate(
+                ((pageWidth - scaledWidth) / 2).toFloat(),
+                topPadding.toFloat()
+            )
+        }
+
+        pdfCanvas.drawBitmap(partBitmap, matrix, null)
         pdfDocument.finishPage(page)
 
         yOffset += heightToCopy
+
+        // 🔥 **Pastikan semua baris masuk ke halaman berikutnya**
+        if (yOffset >= bitmap.height && totalRows > 25) {
+            break
+        }
+
         pageNumber++
     }
 
     val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-    val fileName = "SafetyBriefing_${agenda.terminal}_$timeStamp.pdf"
+    val fileName = "Laporan_$timeStamp.pdf"
 
     val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
     val file = File(downloadsDir, fileName)
@@ -194,885 +328,6 @@ fun saveBitmapAbsensi(activity: ComponentActivity, bitmap: Bitmap, agenda: Agend
     Toast.makeText(activity, "PDF berhasil disimpan di ${file.absolutePath}", Toast.LENGTH_LONG).show()
 }
 
-@Composable
-fun PdfLayoutAbsensi(agenda: Agenda_detail?) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(start = 28.dp, top = 10.dp, end = 28.dp) // Atur padding atas, kanan, kiri
-            .background(Color.White)
-    ) {
-        // 🔹 Header dengan 3 Kolom
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min), // ✅ Menyesuaikan tinggi Row dengan kontennya
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 🔹 Kolom 1: Logo
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp)
-                    .fillMaxHeight()// ✅ Padding lebih kecil agar tidak ada space kosong besar
-                    .align(Alignment.CenterVertically), // ✅ Agar sejajar dengan teks lainnya
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.logo_spmt),
-                    contentDescription = "Logo SPMT",
-                    modifier = Modifier
-                        .width(90.dp) // Atur lebar
-                        .height(30.dp) // Atur tinggi
-                )
-
-            }
-
-            // 🔹 Kolom 2: Judul
-            Box(
-                modifier = Modifier
-                    .weight(1.5f)
-                    .fillMaxHeight()
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp) // ✅ Padding lebih kecil
-                    .align(Alignment.CenterVertically), // ✅ Agar sejajar dengan lainnya
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "PENGENDALIAN PELAKSANAAN SAFETY BRIEFING",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp) // ✅ Padding lebih kecil
-                    .align(Alignment.CenterVertically), // ✅ Agar sejajar dengan lainnya
-                verticalArrangement = Arrangement.spacedBy(4.dp) // ✅ Jarak antar teks lebih proporsional
-            ) {
-                Text("No Dokumen:  ", fontSize = 6.sp, fontWeight = FontWeight.Normal)
-                Divider(color = Color.Black, thickness = 1.dp)
-
-                Text("No Revisi: 0", fontSize = 6.sp, fontWeight = FontWeight.Normal)
-                Divider(color = Color.Black, thickness = 1.dp)
-
-                Text(
-                    "Tanggal: ${
-                        agenda?.timestamp?.toDate()?.let {
-                            SimpleDateFormat(
-                                "dd/MM/yyyy",
-                                Locale.getDefault()
-                            ).format(it)
-                        } ?: "-"
-                    }",
-                    fontSize = 6.sp, fontWeight = FontWeight.Normal
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min) // Pastikan tinggi semua kolom sejajar
-        ) {
-            // 🔹 Kolom 1: Hari / Tanggal
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .border(1.dp, Color.Black)
-                    .padding(8.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(
-                    "Hari / Tanggal: ${
-                        agenda?.timestamp?.toDate()?.let {
-                            SimpleDateFormat("EEEE, dd MMMM yyyy", Locale("id")).format(it)
-                        } ?: "-"
-                    }",
-                    fontSize = 7.sp
-                )
-            }
-
-            // 🔹 Kolom 2: Jam
-            Box(
-                modifier = Modifier
-                    .weight(0.75f)
-                    .fillMaxHeight()
-                    .border(1.dp, Color.Black)
-                    .padding(8.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(
-                    "Jam: ${
-                        agenda?.shift?.split(" ")?.drop(2)?.joinToString(" ") ?: "-"
-                    }",
-                    fontSize = 7.sp
-                )
-            }
-
-            // 🔹 Kolom 3: Shift
-            Box(
-                modifier = Modifier
-                    .weight(0.75f)
-                    .fillMaxHeight()
-                    .border(1.dp, Color.Black)
-                    .padding(8.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(
-                    "${
-                        agenda?.shift?.split(" ")?.take(2)?.joinToString(" ") ?: "-"
-                    } (${
-                        agenda?.group ?: "-"
-                    })",
-                    fontSize = 7.sp
-                )
-            }
-
-            // 🔹 Kolom 4: Tempat (Terminal)
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .border(1.dp, Color.Black)
-                    .padding(8.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(
-                    "Tempat: ${agenda?.tempat ?: "-"}",
-                    fontSize = 7.sp
-                )
-            }
-        }
-        // 🔹 Row untuk Perwira Briefing & Koordinator
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min), // 🔹 Menyamakan tinggi antar kolom
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 🔹 Kolom 1: Perwira Briefing
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text("Perwira Briefing", fontSize = 8.sp, fontWeight = FontWeight.Bold)
-            }
-
-            // 🔹 Kolom 2: Nama Perwira
-            Box(
-                modifier = Modifier
-                    .weight(0.75f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                val text = when (agenda?.terminal) {
-                    "Terminal Jamrud" -> "Anton Yudhiana"
-                    "Terminal Mirah", "Terminal Nilam" -> "Dimas Wibowo"
-                    else -> "Nama Tidak Diketahui" // Jika terminal tidak cocok
-                }
-
-                Text(": $text", fontSize = 8.sp)
-            }
-
-            // 🔹 Kolom 3: Koordinator
-            Box(
-                modifier = Modifier
-                    .weight(0.75f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text("Koordinator", fontSize = 8.sp, fontWeight = FontWeight.Bold)
-            }
-
-            // 🔹 Kolom 4: Nama Koordinator dari agenda
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(": ${agenda?.koordinator ?: "-"}", fontSize = 8.sp)
-            }
-        }
-
-// 🔹 Row untuk Keterangan
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min) // 🔹 Menyamakan tinggi secara otomatis
-                .border(1.dp, Color.Black)
-                .padding(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Keterangan:",
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.fillMaxWidth(), // 🔹 Memastikan teks melebar ke seluruh kolom
-                textAlign = TextAlign.Start // 🔹 Rata kiri
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min) // 🔹 Menyamakan tinggi secara otomatis
-                .border(1.dp, Color.Black)
-                .padding(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 🔹 Kolom 1: Nomor
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "1",
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            // 🔹 Kolom 2: Informasi Safety Briefing
-            Box(
-                modifier = Modifier
-                    .weight(15f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(
-                    "Safety Briefing wajib dilakukan setiap awal shift",
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.Normal,
-                    textAlign = TextAlign.Start
-                )
-            }
-        }
-
-        // 🔹 Row untuk Informasi Safety Briefing
-        Row(
-            modifier = Modifier
-                .height(IntrinsicSize.Min) // 🔹 Menyamakan tinggi secara otomatis
-                .border(1.dp, Color.Black)
-                .padding(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "2",
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(15f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(
-                    "Formulir Safety Briefing ini akan dimonitor oleh Dinas yang membidangi HSSE",
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.Normal,
-                    textAlign = TextAlign.Start
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .height(IntrinsicSize.Min)
-                .border(1.dp, Color.Black)
-                .padding(4.dp)
-        ) {
-            // 🔹 Kolom 1: MATERI YANG DISAMPAIKAN
-            Column(
-                modifier = Modifier
-                    .weight(2f)
-                    .fillMaxHeight()
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp)
-            ) {
-                Text(
-                    "MATERI YANG DISAMPAIKAN :",
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp)) // 🔹 Spasi kecil sebelum daftar
-
-                Text("1. Health", fontSize = 7.sp)
-                Text("2. Safety", fontSize = 7.sp)
-                Text("3. Security", fontSize = 7.sp)
-                Text("4. Environment", fontSize = 7.sp)
-                Text("5. Operation", fontSize = 7.sp)
-            }
-
-            // 🔹 Kolom 2: Dokumentasi (dibagi menjadi 2 row)
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp)
-            ) {
-                // 🔹 Row 1: Judul DOKUMENTASI
-                Text(
-                    "DOKUMENTASI:",
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                // 🔹 Row 2: Menampilkan Gambar
-                Box(
-                    modifier = Modifier
-                        .weight(2f) // ✅ Sesuai dengan perbandingan 1:5
-                        .fillMaxHeight()
-                        .fillMaxWidth()
-                        .border(1.dp, Color.Gray),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val imageUrl = agenda?.photoPath // 🔹 Ambil photoPath dari Firestore
-                    val painter = if (imageUrl != null) {
-                        rememberAsyncImagePainter(model = imageUrl) // 🔹 Load image dari URL Firestore
-                    } else {
-                        painterResource(id = R.drawable.ic_launcher_background) // 🔹 Gambar dummy jika gagal
-                    }
-
-                    Image(
-                        painter = painter,
-                        contentDescription = "Dokumentasi",
-                        modifier = Modifier
-                            .width(100.dp)
-                            .height(40.dp) // 🔹 Sesuaikan tinggi gambar
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, Color.Black)
-                .padding(4.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(4.dp)
-            ) {
-                // 🔹 Judul AGENDA BRIEFING
-                Text(
-                    "AGENDA BRIEFING:",
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(4.dp)) // 🔹 Spasi kecil sebelum isi agenda
-
-                agenda?.agenda?.forEachIndexed { index, item ->
-                    Text("${index + 1}. $item", fontSize = 8.sp)
-                } ?: Text("- Tidak ada agenda -", fontSize = 7.sp)
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .height(IntrinsicSize.Min)
-                .border(1.dp, Color.Black)
-                .padding(4.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .weight(2f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "Rekap Peserta Safety Briefing",
-                    fontSize = 8.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(0.75f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Hadir", fontSize = 8.sp, textAlign = TextAlign.Center)
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(0.75f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Sakit", fontSize = 8.sp, textAlign = TextAlign.Center)
-            }
-
-            // 🔹 Kolom 4: Cuti
-            Box(
-                modifier = Modifier
-                    .weight(0.75f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Cuti", fontSize = 8.sp, textAlign = TextAlign.Center)
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(0.75f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Izin", fontSize = 8.sp, textAlign = TextAlign.Center)
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Tanpa Keterangan", fontSize = 8.sp, textAlign = TextAlign.Center)
-            }
-        }
-
-        var jumlahPekerja by remember { mutableStateOf(0) }
-        var jumlahSakit by remember { mutableStateOf(0) }
-        var jumlahCuti by remember { mutableStateOf(0) }
-        var jumlahIzin by remember { mutableStateOf(0) }
-        var tanpaKeterangan by remember { mutableStateOf(0) }
-
-        var briefingData by remember { mutableStateOf<Map<String, Any>?>(null) }
-
-        LaunchedEffect(agenda) {
-            val briefingId = agenda?.briefingId
-            if (briefingId == null) {
-                Log.e("FirestoreDebug", "briefingId is null")
-                return@LaunchedEffect
-            }
-
-            Firebase.firestore.collection("agenda")
-                .document(briefingId)
-                .get()
-                .addOnSuccessListener { document ->
-                    if (document != null && document.exists()) {
-                        Log.d("FirestoreDebug", "Data agenda ditemukan: ${document.data}")
-                        briefingData = document.data
-                        jumlahIzin = (document["izin"] as? List<*>)?.size ?: 0
-                        jumlahSakit = (document["sakit"] as? List<*>)?.size ?: 0
-                        jumlahCuti = (document["cuti"] as? List<*>)?.size ?: 0
-
-                        val selectedTerminal = document.getString("terminal") ?: ""
-                        val selectedGroup = document.getString("group") ?: ""
-
-                        Firebase.firestore.collection("users")
-                            .whereEqualTo("terminal", selectedTerminal)
-                            .whereEqualTo("group", selectedGroup)
-                            .get()
-                            .addOnSuccessListener { userSnapshot ->
-                                val totalPekerja = userSnapshot.size()
-                                Log.d("FirestoreDebug", "Total pekerja di terminal $selectedTerminal dan group $selectedGroup: $totalPekerja")
-
-                                Firebase.firestore.collection("agenda")
-                                    .document(briefingId)
-                                    .collection("attendance")
-                                    .get()
-                                    .addOnSuccessListener { attendanceSnapshot ->
-                                        jumlahPekerja = attendanceSnapshot.size()
-                                        Log.d("FirestoreDebug", "Jumlah pekerja hadir: $jumlahPekerja")
-
-                                        // 🔹 Hitung jumlah pekerja tanpa keterangan
-                                        tanpaKeterangan = totalPekerja - (jumlahPekerja + jumlahIzin + jumlahSakit + jumlahCuti)
-                                        Log.d("FirestoreDebug", "Jumlah pekerja tanpa keterangan: $tanpaKeterangan")
-                                    }
-                                    .addOnFailureListener { error ->
-                                        Log.e("FirestoreDebug", "Gagal mengambil data attendance", error)
-                                    }
-                            }
-                            .addOnFailureListener { error ->
-                                Log.e("FirestoreDebug", "Gagal mengambil data users", error)
-                            }
-                    } else {
-                        Log.e("FirestoreDebug", "Dokumen agenda tidak ditemukan")
-                    }
-                }
-                .addOnFailureListener { error ->
-                    Log.e("FirestoreDebug", "Gagal mengambil data agenda", error)
-                }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, Color.Black)
-                .padding(4.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .weight(2f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "Jumlah Pekerja (orang)",
-                    fontSize = 8.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(0.75f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("$jumlahPekerja", fontSize = 8.sp, textAlign = TextAlign.Center)
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(0.75f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("$jumlahIzin", fontSize = 8.sp, textAlign = TextAlign.Center)
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(0.75f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("$jumlahSakit", fontSize = 8.sp, textAlign = TextAlign.Center)
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(0.75f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("$jumlahCuti", fontSize = 8.sp, textAlign = TextAlign.Center)
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("$tanpaKeterangan", fontSize = 8.sp, textAlign = TextAlign.Center)
-            }
-        }
-
-        var namaSakit by remember { mutableStateOf<List<String>>(emptyList()) }
-        var namaCuti by remember { mutableStateOf<List<String>>(emptyList()) }
-        var namaIzin by remember { mutableStateOf<List<String>>(emptyList()) }
-        var namaTanpaKeterangan by remember { mutableStateOf<List<String>>(emptyList()) }
-        var namaTidakLengkapAtribut by remember { mutableStateOf<List<String>>(emptyList()) }
-
-        LaunchedEffect(agenda) {
-            val briefingId = agenda?.briefingId
-            if (briefingId == null) {
-                Log.e("FirestoreDebug", "briefingId is null")
-                return@LaunchedEffect
-            }
-
-            Firebase.firestore.collection("agenda")
-                .document(briefingId)
-                .get()
-                .addOnSuccessListener { document ->
-                    if (document != null && document.exists()) {
-                        Log.d("FirestoreDebug", "Data agenda ditemukan: ${document.data}")
-
-                        namaSakit = (document["sakit"] as? List<String>) ?: emptyList()
-                        namaCuti = (document["cuti"] as? List<String>) ?: emptyList()
-                        namaIzin = (document["izin"] as? List<String>) ?: emptyList()
-                        namaTanpaKeterangan = (document["tanpaKeterangan"] as? List<String>) ?: emptyList()
-                        namaTidakLengkapAtribut = (document["izin"] as? List<String>) ?: emptyList()
-                    } else {
-                        Log.e("FirestoreDebug", "Dokumen agenda tidak ditemukan")
-                    }
-                }
-                .addOnFailureListener { error ->
-                    Log.e("FirestoreDebug", "Gagal mengambil data agenda", error)
-                }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-                .border(1.dp, Color.Black)
-                .padding(4.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .weight(2f)
-                    .fillMaxHeight()
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(
-                    "Nama Pekerja Sakit",
-                    fontSize = 7.sp,
-                    textAlign = TextAlign.Left
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(4f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp)
-            ) {
-                Column {
-                    namaSakit.forEach { nama ->
-                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
-                    }
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-                .border(1.dp, Color.Black)
-                .padding(4.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .weight(2f)
-                    .fillMaxHeight()
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(
-                    "Nama Pekerja Cuti",
-                    fontSize = 7.sp,
-                    textAlign = TextAlign.Left
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .weight(4f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp)
-            ) {
-                Column {
-                    namaCuti.forEach { nama ->
-                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
-                    }
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-                .border(1.dp, Color.Black)
-                .padding(4.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .weight(2f)
-                    .fillMaxHeight()
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(
-                    "Nama Pekerja Izin",
-                    fontSize = 7.sp,
-                    textAlign = TextAlign.Left
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .weight(4f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp)
-            ) {
-                Column {
-                    namaIzin.forEach { nama ->
-                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
-                    }
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-                .border(1.dp, Color.Black)
-                .padding(4.dp)
-        ) {
-            // 🔹 Kolom 1: Nama Pekerja Sakit
-            Box(
-                modifier = Modifier
-                    .weight(2f)
-                    .fillMaxHeight()
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(
-                    "Nama Pekerja Tanpa Keterangan",
-                    fontSize = 7.sp,
-                    textAlign = TextAlign.Left
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .weight(4f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp)
-            ) {
-                Column {
-                    namaTanpaKeterangan.forEach { nama ->
-                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
-                    }
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-                .border(1.dp, Color.Black)
-                .padding(4.dp)
-        ) {
-            // 🔹 Kolom 1: Nama Pekerja Sakit
-            Box(
-                modifier = Modifier
-                    .weight(2f)
-                    .fillMaxHeight()
-                    .border(1.dp, Color.Black)
-                    .padding(4.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(
-                    "Nama Pekerja Tidak Lengkap Atribut",
-                    fontSize = 7.sp,
-                    textAlign = TextAlign.Left
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(4f)
-                    .border(1.dp, Color.Black)
-                    .fillMaxHeight()
-                    .padding(4.dp)
-            ) {
-                Column {
-                    namaTidakLengkapAtribut.forEach { nama ->
-                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
-                    }
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("PERWIRA BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
-                Spacer(modifier = Modifier.height(40.dp)) // Ruang untuk tanda tangan
-                Text(
-                    text = when (agenda?.terminal) {
-                        "Terminal Jamrud" -> "(Anton Yudhiana)"
-                        "Terminal Mirah", "Terminal Nilam" -> "(Dimas Wibowo)"
-                        else -> "(Nama Tidak Diketahui)"
-                    },
-                    fontSize = 7.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("KOORDINATOR BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
-                Spacer(modifier = Modifier.height(40.dp)) // Ruang untuk tanda tangan
-                Text(
-                    text = "(${agenda?.koordinator ?: "-"})",
-                    fontSize = 7.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
-}
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -1090,98 +345,160 @@ fun UnduhPdfAbsensi(
     filteredUsers: List<String>,
     attendanceList: List<Pair<String, String>>
 ) {
+    val context = LocalContext.current
+    val activity = context as? ComponentActivity
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 54.dp)
+    ) {
+        // 🔹 Judul Laporan Absensi (Tetap di Atas)
+        Text(
+            text = "Laporan Absensi Safety Briefing",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        // 🔹 Informasi Terminal, Shift, dan Tanggal (Dibuat Vertikal)
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp) // Margin kanan, kiri, atas, bawah
+                .fillMaxWidth()
+                .padding(top = 8.dp) // Beri jarak dari judul
         ) {
-            // Judul Laporan Absensi
-            Text(
-                text = "Laporan Absensi",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Text(text = "Terminal: $selectedTerminal", fontSize = 10.sp, color = Color.Black)
+            Text(text = "Shift: $selectedShift", fontSize = 10.sp, color = Color.Black)
+            Text(text = "Tanggal: $selectedDate", fontSize = 10.sp, color = Color.Black)
+        }
 
-            // Informasi Terminal & Shift
+        Spacer(modifier = Modifier.height(8.dp)) // 🔹 Tambahkan jarak sebelum tabel
+
+        // 🔹 LazyColumn Harus Ada di Dalam Column, dan Menggunakan weight(1f)
+        if (filteredUsers.isEmpty()) {
             Text(
-                text = "Terminal: $selectedTerminal  |  Shift: $selectedShift",
-                fontSize = 14.sp,
+                text = "Belum ada data pengguna",
+                fontSize = 10.sp,
                 color = Color.Gray,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                modifier = Modifier.padding(top = 8.dp)
             )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f) // 🔥 Memastikan tabel mengambil sisa ruang
+                    .padding(2.dp)
+            ) {
+                // 🔹 Header Tabel
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min)
+                            .background(Color.White)
+                            .padding(vertical = 3.dp)
+                    ) {
+                        TableCell("No", 0.3f, Color.Black, true)
+                        DividerVertikal()
+                        TableCell("Nama", 1f, Color.Black, true)
+                        DividerVertikal()
+                        TableCell("Waktu Kehadiran", 1f, Color.Black, true)
+                        DividerVertikal()
+                        TableCell("Keterangan", 1f, Color.Black, true)
+                    }
+                    Divider(color = Color.Black, thickness = 1.dp)
+                }
 
-            if (filteredUsers.isEmpty()) {
-                Text(
-                    text = "Belum ada data pengguna",
-                    fontSize = 14.sp,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, Color.Gray, RoundedCornerShape(8.dp)) // Border tabel
-                        .padding(8.dp)
-                ) {
-                    // Header Table
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFF0E73A7))
-                                .padding(vertical = 6.dp),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            TableCell("No", 0.3f, Color.White, true)
-                            TableCell("Nama", 1f, Color.White, true)
-                            TableCell("Waktu Kehadiran", 1f, Color.White, true)
-                            TableCell("Keterangan", 1f, Color.White, true)
-                        }
-                        Divider(color = Color.Black, thickness = 1.dp)
+                // 🔹 Isi Tabel
+                itemsIndexed(filteredUsers.sorted()) { index, name ->
+                    val attendance = attendanceList.find { it.first == name }
+                    val timestamp = attendance?.second ?: "-"
+                    val status = when {
+                        name in cutiList -> "Cuti"
+                        name in sakitList -> "Sakit"
+                        name in izinList -> "Izin"
+                        attendance != null -> "Hadir"
+                        else -> "Tanpa Keterangan"
                     }
 
-                    // Isi Table
-                    itemsIndexed(filteredUsers.sorted()) { index, name ->
-                        val attendance = attendanceList.find { it.first == name }
-                        val timestamp = attendance?.second ?: "-"
-                        val status = when {
-                            name in cutiList -> "Cuti"
-                            name in sakitList -> "Sakit"
-                            name in izinList -> "Izin"
-                            attendance != null -> "Hadir"
-                            else -> "Tanpa Keterangan"
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                        ) {
-                            TableCell("${index + 1}", 0.3f)
-                            TableCell(name, 1f)
-                            TableCell(timestamp, 1f, Color.Gray)
-                            TableCell(status, 1f, if (status == "Hadir") Color.Green else Color.Red)
-                        }
-                        Divider(color = Color.LightGray, thickness = 1.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 1.dp)
+                            .height(IntrinsicSize.Min)
+                    ) {
+                        TableCell("${index + 1}", 0.3f)
+                        DividerVertikal()
+                        TableCell(name, 1f)
+                        DividerVertikal()
+                        TableCell(timestamp, 1f, textColor = Color.Gray)
+                        DividerVertikal()
+                        TableCell(status, 1f, textColor = if (status == "Hadir") Color.Green else Color.Red)
                     }
+
+                    Divider(color = Color.LightGray, thickness = 1.dp)
                 }
             }
         }
     }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = 8.dp) // Opsional: Padding agar tidak mepet layar
+    ) {
+        //
+        Button(
+            onClick = {
+                activity?.let { safeActivity ->
+                    generatePdf(safeActivity, selectedTerminal, selectedShift, selectedDate, totalUsers, absentUsers, presentUsers, briefingId,
+                        cutiList,
+                        sakitList,
+                        izinList, filteredUsers, attendanceList)
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 16.dp)
+                .align(Alignment.BottomCenter) // Memastikan tombol ada di bawah
+                .testTag("unduh_pdf_button"),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
+            shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
+        ) {
+            Text("Unduh Laporan Absensi", color = Color.White)
+        }
+    }
+}
 
 @Composable
-fun TableCell(text: String, weight: Float, color: Color = Color.Black, bold: Boolean = false) {
+fun RowScope.TableCell(
+    text: String,
+    weight: Float,
+    textColor: Color = Color.Black,
+    isHeader: Boolean = false,
+    fontSize: TextUnit = 12.sp
+) {
     Text(
         text = text,
-        fontSize = 12.sp,
-        fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-        color = color,
+        fontSize = fontSize, // 🔻 Diperkecil lagi
+        fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal,
+        color = textColor,
         textAlign = TextAlign.Center,
         modifier = Modifier
-            .padding(horizontal = 6.dp)
+            .weight(weight) // ✅ Gunakan dalam RowScope agar tidak error
+            .padding(3.dp) // 🔻 Lebih kecil
     )
 }
+
+@Composable
+fun DividerVertikal() {
+    Box(
+        modifier = Modifier
+            .fillMaxHeight() // ✅ Pastikan tinggi mengikuti parent Row
+            .width(1.dp)
+            .background(Color.Black) // ✅ Pakai background agar lebih jelas
+    )
+}
+
+

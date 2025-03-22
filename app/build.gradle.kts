@@ -10,12 +10,16 @@ android {
     namespace = "com.example.spmtsafetybriefingapp"
     compileSdk = 34
 
+    buildFeatures {
+        buildConfig = true // ✅ Pastikan ini ada
+    }
+
     defaultConfig {
         applicationId = "com.example.spmtsafetybriefingapp"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 7
+        versionName = "2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
