@@ -130,6 +130,11 @@
             android:exported="true"
             android:theme="@style/Theme.SPMTSafetyBriefingApp" />
 
+        <activity
+            android:name=".EditFormActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SPMTSafetyBriefingApp" />
+
     </application>
 
 </manifest>

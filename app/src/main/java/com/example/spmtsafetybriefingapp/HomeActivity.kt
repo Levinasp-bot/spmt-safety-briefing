@@ -599,7 +599,35 @@ class HomeActivity : ComponentActivity() {
             colors = CardDefaults.cardColors(containerColor = Color.White)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(text = "Safety Briefing $terminal", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                val context = LocalContext.current
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Safety Briefing $terminal",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f) // Agar teks memenuhi sisa ruang
+                    )
+                    IconButton(
+                        onClick = {
+                            val intent = Intent(context, EditFormActivity::class.java).apply {
+                                putExtra("briefingId", briefingId) // Mengirim briefingId ke activity EditFormActivity
+                            }
+                            context.startActivity(intent)
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.edit),
+                            contentDescription = "Edit",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
                 Text(text = shift, fontSize = 14.sp, color = Color.Gray)
                 Text(text = time, fontSize = 14.sp, color = Color.Gray)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -622,7 +650,7 @@ class HomeActivity : ComponentActivity() {
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
                 var showInvalidLocation by remember { mutableStateOf(false) }
                 var showInvalidTime by remember { mutableStateOf(false) }
@@ -1075,7 +1103,7 @@ class HomeActivity : ComponentActivity() {
                     // 🔹 Log jarak pengguna ke lokasi absen
                     Log.d("GeoFence", "Jarak pengguna ke lokasi absen: $distance meter")
 
-                    callback(distance <= 100.0) // ✅ Izinkan absen jika dalam radius 150 meter
+                    callback(distance <= 150.0) // ✅ Izinkan absen jika dalam radius 150 meter
                 } else {
                     Log.e("GeoFence", "GeoPoint tidak ditemukan dalam dokumen Firestore untuk terminal: $tempat")
                     callback(false)
