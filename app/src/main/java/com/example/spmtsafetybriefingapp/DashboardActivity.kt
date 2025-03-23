@@ -629,18 +629,20 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
                                 }
                             }
 
-                            itemsIndexed(filteredUsers.sorted()) { index, name ->
-                                val attendance = attendanceList.find { it.first == name }
-                                val timestamp = attendance?.second
-                                    ?: "-" // Jika hadir, ambil timestamp, jika tidak "-"
+                            val sortedUsers = filteredUsers.map { name ->
+                                val timestamp = attendanceList.find { it.first == name }?.second
+                                Pair(name, timestamp)
+                            }.sortedByDescending { it.second }
 
+                            itemsIndexed(sortedUsers) { index, (name, timestamp) ->
                                 val status = when {
                                     name in cutiList -> "Cuti"
                                     name in sakitList -> "Sakit"
                                     name in izinList -> "Izin"
-                                    attendance != null -> "Hadir"
+                                    timestamp != null -> "Hadir"
                                     else -> "Tanpa Keterangan"
                                 }
+
 
                                 Column(
                                     modifier = Modifier
@@ -664,7 +666,7 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
                                             modifier = Modifier.weight(1f).padding(start = 8.dp)
                                         )
                                         Text(
-                                            text = timestamp,
+                                            text = timestamp ?: "-",
                                             fontSize = 12.sp, // Ukuran font lebih kecil
                                             color = Color.Gray,
                                             textAlign = TextAlign.Center, // Pusatkan teks
@@ -739,10 +741,6 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
         }
     }
 }
-
-
-
-
 
 @Composable
 fun BottomNavigationBarDashboard() {

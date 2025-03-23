@@ -175,14 +175,17 @@ fun generatePdf(
                     }
                     Divider(color = Color.Black, thickness = 1.dp)
 
-                    filteredUsers.sorted().forEachIndexed { index, name ->
-                        val attendance = attendanceList.find { it.first == name }
-                        val timestamp = attendance?.second ?: "-"
+                    val sortedUsers = filteredUsers.map { name ->
+                        val timestamp = attendanceList.find { it.first == name }?.second
+                        Pair(name, timestamp)
+                    }.sortedByDescending { it.second } // Urutkan dari terbaru ke terlama
+
+                    sortedUsers.forEachIndexed { index, (name, timestamp) ->
                         val status = when {
                             name in cutiList -> "Cuti"
                             name in sakitList -> "Sakit"
                             name in izinList -> "Izin"
-                            attendance != null -> "Hadir"
+                            timestamp != null -> "Hadir"
                             else -> "Tanpa Keterangan"
                         }
 
@@ -195,7 +198,7 @@ fun generatePdf(
                             DividerVertikal()
                             TableCell(name, 1f, fontSize = 10.sp)
                             DividerVertikal()
-                            TableCell(timestamp, 0.8f, textColor = Color.Gray, fontSize = 10.sp)
+                            TableCell(timestamp ?: "-", 0.8f, textColor = Color.Gray, fontSize = 10.sp)
                             DividerVertikal()
                             TableCell(status, 1f, textColor = if (status == "Hadir") Color.Green else Color.Red, fontSize = 10.sp)
                         }
@@ -216,7 +219,6 @@ fun generatePdf(
             override fun onGlobalLayout() {
                 pdfComposeView.viewTreeObserver.removeOnGlobalLayoutListener(this)
 
-                // 🔥 Ukur ulang tinggi supaya seluruh konten tertangkap
                 pdfComposeView.measure(
                     View.MeasureSpec.makeMeasureSpec(pdfComposeView.width, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED) // 🚀 Ambil seluruh tinggi
@@ -410,15 +412,17 @@ fun UnduhPdfAbsensi(
                     Divider(color = Color.Black, thickness = 1.dp)
                 }
 
-                // 🔹 Isi Tabel
-                itemsIndexed(filteredUsers.sorted()) { index, name ->
-                    val attendance = attendanceList.find { it.first == name }
-                    val timestamp = attendance?.second ?: "-"
+                val sortedUsers = filteredUsers.map { name ->
+                    val timestamp = attendanceList.find { it.first == name }?.second
+                    Pair(name, timestamp)
+                }.sortedByDescending { it.second }
+
+                itemsIndexed(sortedUsers) { index, (name, timestamp) ->
                     val status = when {
                         name in cutiList -> "Cuti"
                         name in sakitList -> "Sakit"
                         name in izinList -> "Izin"
-                        attendance != null -> "Hadir"
+                        timestamp != null -> "Hadir"
                         else -> "Tanpa Keterangan"
                     }
 
@@ -432,7 +436,7 @@ fun UnduhPdfAbsensi(
                         DividerVertikal()
                         TableCell(name, 1f)
                         DividerVertikal()
-                        TableCell(timestamp, 1f, textColor = Color.Gray)
+                        TableCell(timestamp ?: "-", 1f, textColor = Color.Gray)
                         DividerVertikal()
                         TableCell(status, 1f, textColor = if (status == "Hadir") Color.Green else Color.Red)
                     }

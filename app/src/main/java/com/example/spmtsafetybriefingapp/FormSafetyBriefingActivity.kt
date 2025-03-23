@@ -92,6 +92,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
         var imageBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
         val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+            imageBitmap = null
             imageBitmap = bitmap
         }
         var selectedSakit by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -110,6 +111,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             uri?.let {
                 try {
                     val bitmap = MediaStore.Images.Media.getBitmap(context.contentResolver, it)
+                    imageBitmap = null
                     imageBitmap = bitmap
                 } catch (e: IOException) {
                     e.printStackTrace()
@@ -329,17 +331,19 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             Spacer(modifier = Modifier.height(16.dp))
 
             imageBitmap?.let { bitmap ->
-                Image(
-                    painter = remember { BitmapPainter(bitmap.asImageBitmap()) },
-                    contentDescription = "Dokumentasi",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
-                        .background(Color.LightGray)
-                        .padding(8.dp)
-                )
+                key(bitmap) { //
+                    Image(
+                        painter = remember { BitmapPainter(bitmap.asImageBitmap()) },
+                        contentDescription = "Dokumentasi",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
+                            .background(Color.LightGray)
+                            .padding(8.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))

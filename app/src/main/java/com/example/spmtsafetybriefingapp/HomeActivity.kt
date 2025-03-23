@@ -157,6 +157,27 @@ class HomeActivity : ComponentActivity() {
         var userRole by remember { mutableStateOf("") }
         var isRefreshing by remember { mutableStateOf(false) } // 🔹 State untuk Refresh
 
+        val allowedNames = listOf(
+            "Eko Mardiyanto",
+            "Nanang Iswahyudi",
+            "Irawan",
+            "Agus Dwi Susanto",
+            "Mohammad Samsul Syamsuri",
+            "Achmad Zakaria",
+            "Moh.Hasan Arif",
+            "Suwito Mulyo",
+            "Agus Tribusono",
+            "Hari Murtiantoro",
+            "Sugiono",
+            "Herwanto"
+        )
+
+        val allowedKoor = listOf(
+            "Koordinator Operasi Jamrud",
+            "Koordinator Operasi Nilam",
+            "Koordinator Operasi Mirah"
+        )
+
         LaunchedEffect(Unit) {
             getPendingUserCount { count ->
                 pendingCount = count
@@ -311,28 +332,8 @@ class HomeActivity : ComponentActivity() {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    val allowedRoles = listOf(
-                                        "Koordinator Operasi Jamrud",
-                                        "Koordinator Operasi Nilam",
-                                        "Koordinator Operasi Mirah"
-                                    )
 
-                                    val allowedNames = listOf(
-                                        "Eko Mardiyanto",
-                                        "Nanang Iswahyudi",
-                                        "Irawan",
-                                        "Agus Dwi Susanto",
-                                        "Mohammad Samsul Syamsuri",
-                                        "Achmad Zakaria",
-                                        "Moh.Hasan Arif",
-                                        "Suwito Mulyo",
-                                        "Agus Tribusono",
-                                        "Hari Murtiantoro",
-                                        "Sugiono",
-                                        "Herwanto"
-                                    )
-
-                                    if (userRole in allowedRoles || userName in allowedNames) {
+                                    if (userRole in allowedKoor || userName in allowedNames) {
                                         Image(
                                             painter = painterResource(id = R.drawable.ic_action_name),
                                             contentDescription = "Tambah Briefing",
@@ -483,6 +484,28 @@ class HomeActivity : ComponentActivity() {
         var userName by remember { mutableStateOf("User") }
         var imageUri by remember { mutableStateOf<Uri?>(null) }
         var participantsCount by remember { mutableStateOf(0) }
+        var userRole = remember { mutableStateOf("") }
+
+        val allowedNames = listOf(
+            "Eko Mardiyanto",
+            "Nanang Iswahyudi",
+            "Irawan",
+            "Agus Dwi Susanto",
+            "Mohammad Samsul Syamsuri",
+            "Achmad Zakaria",
+            "Moh.Hasan Arif",
+            "Suwito Mulyo",
+            "Agus Tribusono",
+            "Hari Murtiantoro",
+            "Sugiono",
+            "Herwanto"
+        )
+
+        val allowedKoor = listOf(
+            "Koordinator Operasi Jamrud",
+            "Koordinator Operasi Nilam",
+            "Koordinator Operasi Mirah"
+        )
 
         LaunchedEffect(briefingId) {
             if (briefingId.isNotEmpty()) {
@@ -500,7 +523,7 @@ class HomeActivity : ComponentActivity() {
             if (terminal.isNotEmpty() && terminal != "Tidak diketahui" && userId.isNotEmpty()) {
                 try {
                     val userDoc = firestore.collection("users").document(userId).get().await()
-                    val userRole = userDoc.getString("role") ?: ""
+                    userRole.value = userDoc.getString("role") ?: ""
                     val userGroup = userDoc.getString("group") ?: ""
 
                     Log.d("Firestore", "User Login: ID=$userId, Role=$userRole, Group=$userGroup")
@@ -611,20 +634,25 @@ class HomeActivity : ComponentActivity() {
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f) // Agar teks memenuhi sisa ruang
                     )
-                    IconButton(
-                        onClick = {
-                            val intent = Intent(context, EditFormActivity::class.java).apply {
-                                putExtra("briefingId", briefingId) // Mengirim briefingId ke activity EditFormActivity
+                    if (userRole.value in allowedKoor || userName in allowedNames) {
+                        IconButton(
+                            onClick = {
+                                val intent = Intent(context, EditFormActivity::class.java).apply {
+                                    putExtra(
+                                        "briefingId",
+                                        briefingId
+                                    ) // Mengirim briefingId ke activity EditFormActivity
+                                }
+                                context.startActivity(intent)
                             }
-                            context.startActivity(intent)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.edit),
+                                contentDescription = "Edit",
+                                tint = Color.Gray,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.edit),
-                            contentDescription = "Edit",
-                            tint = Color.Gray,
-                            modifier = Modifier.size(20.dp)
-                        )
                     }
                 }
 
@@ -820,30 +848,35 @@ class HomeActivity : ComponentActivity() {
                 }
 
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                Button(
-                    onClick = {
-                        firestore.collection("agenda").document(briefingId)
-                            .update("status", "selesai")
-                            .addOnSuccessListener {
-                                Log.d("FirestoreUpdate", "Status berhasil diperbarui menjadi selesai")
+                if (userRole in allowedKoor || userName in allowedNames) {
+                    Button(
+                        onClick = {
+                            firestore.collection("agenda").document(briefingId)
+                                .update("status", "selesai")
+                                .addOnSuccessListener {
+                                    Log.d(
+                                        "FirestoreUpdate",
+                                        "Status berhasil diperbarui menjadi selesai"
+                                    )
 
-                                val intent = (context as? Activity)?.intent
-                                context.startActivity(intent)
-                                (context as? Activity)?.finish()
-                            }
-                            .addOnFailureListener { e ->
-                                Log.e("FirestoreUpdate", "Gagal memperbarui status", e)
-                            }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
-                    shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
-                ) {
-                    Text("Akhiri Kegiatan")
+                                    val intent = (context as? Activity)?.intent
+                                    context.startActivity(intent)
+                                    (context as? Activity)?.finish()
+                                }
+                                .addOnFailureListener { e ->
+                                    Log.e("FirestoreUpdate", "Gagal memperbarui status", e)
+                                }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
+                        shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
+                    ) {
+                        Text("Akhiri Kegiatan")
+                    }
                 }
 
                 LaunchedEffect(shouldRefresh) {
@@ -903,7 +936,6 @@ class HomeActivity : ComponentActivity() {
                             if (attendanceEmbedding != null) {
                                 val similarity = calculateCosineSimilarity(userEmbedding, attendanceEmbedding)
 
-                                // Log nilai akurasi kecocokan wajah
                                 Log.d("FaceRecognition", "Akurasi wajah: ${similarity * 100}%")
 
                                 if (similarity >= 0.4) {
