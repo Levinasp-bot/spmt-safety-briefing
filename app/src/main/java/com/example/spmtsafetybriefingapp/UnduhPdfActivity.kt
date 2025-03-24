@@ -5,6 +5,7 @@ import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -56,6 +57,7 @@ import java.util.Date
 import java.util.Locale
 import android.graphics.Rect
 import android.os.Build
+import android.util.TypedValue
 import androidx.annotation.RequiresApi
 import com.google.firebase.firestore.ListenerRegistration
 
@@ -117,38 +119,100 @@ fun generatePdfFromCompose(activity: ComponentActivity, agenda: Agenda_detail?) 
 }
 
 fun saveBitmapAsPdf(activity: ComponentActivity, bitmap: Bitmap, agenda: Agenda_detail) {
-    val pageHeight = 1800  // Tinggi konten per halaman (sebelum margin)
-    val marginTop = 100     // Margin atas untuk halaman kedua dan seterusnya
-    val marginBottom = 100  // Margin bawah untuk semua halaman
-    val totalHeight = bitmap.height
+    val pageHeight = 1800
+    val pageWidth = bitmap.width
     val pdfDocument = PdfDocument()
 
-    var yOffset = 0
     var pageNumber = 1
 
-    while (yOffset < totalHeight) {
-        val isFirstPage = (pageNumber == 1)
-        val heightToCopy = minOf(pageHeight - if (isFirstPage) marginBottom else marginTop, totalHeight - yOffset)
+    // 🔹 Halaman Pertama: Konten Utama
+    val firstPageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+    val firstPage = pdfDocument.startPage(firstPageInfo)
+    firstPage.canvas.drawBitmap(bitmap, 0f, 0f, null)
+    pdfDocument.finishPage(firstPage)
 
-        if (heightToCopy <= 0) break
+    // 🔹 Halaman Kedua: Tanda Tangan & Barcode
+    pageNumber++
+    val secondPageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+    val secondPage = pdfDocument.startPage(secondPageInfo)
+    val canvas = secondPage.canvas
 
-        val pageBitmap = Bitmap.createBitmap(bitmap, 0, yOffset, bitmap.width, heightToCopy)
+    // 🔹 Konversi dp dan sp ke pixel
+    val metrics = activity.resources.displayMetrics
+    val textSizePx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 7f, metrics) // 7sp ke px
+    val barcodeSizePx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 40f, metrics).toInt() // 40dp ke px
 
-        val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, pageHeight, pageNumber).create()
-        val page = pdfDocument.startPage(pageInfo)
-        val pdfCanvas = page.canvas
-
-        val yOffsetCanvas = if (isFirstPage) 0f else marginTop.toFloat()
-        pdfCanvas.drawBitmap(pageBitmap, 0f, yOffsetCanvas, null)
-        pdfDocument.finishPage(page)
-
-        yOffset += heightToCopy
-        pageNumber++
+    // 🔹 Pengaturan teks
+    val paint = Paint().apply {
+        textSize = textSizePx
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        color = android.graphics.Color.BLACK
+        textAlign = Paint.Align.CENTER // ✅ Teks di tengah
     }
+
+    // 🔹 Posisi dasar
+    val centerXPerwira = pageWidth * 0.3f // Center untuk perwira
+    val centerXKoordinator = pageWidth * 0.7f // Center untuk koordinator
+    val sameYPosition = 150f // 🔥 Perwira & Koordinator sejajar
+    val barcodeOffsetY = 20f  // Jarak barcode dari teks
+    val spacingAboveName = barcodeSizePx + 50f // ✅ Jarak keterangan ke nama lebih besar dari barcode
+
+    // 🟢 PERWIRA BRIEFING (LURUS DENGAN KOORDINATOR)
+    canvas.drawText("PERWIRA BRIEFING", centerXPerwira, sameYPosition, paint)
+
+    val perwiraBarcode = when (agenda.terminal) {
+//        "Terminal Jamrud" -> R.drawable.barcode_anton
+//        "Terminal Mirah" -> R.drawable.barcode_dimas
+//        "Terminal Nilam" -> R.drawable.barcode_budi
+        else -> null
+    }
+
+    perwiraBarcode?.let {
+        val barcodeBitmap = BitmapFactory.decodeResource(activity.resources, it)
+        val scaledBarcode = Bitmap.createScaledBitmap(barcodeBitmap, barcodeSizePx, barcodeSizePx, false)
+        canvas.drawBitmap(scaledBarcode, centerXPerwira - barcodeSizePx / 2, sameYPosition + barcodeOffsetY, null) // ✅ Barcode tetap center
+    }
+
+    canvas.drawText(
+        when (agenda.terminal) {
+            "Terminal Jamrud" -> "(Anton Yudhiana)"
+            "Terminal Mirah", "Terminal Nilam" -> "(Dimas Wibowo)"
+            else -> "(Nama Tidak Diketahui)"
+        },
+        centerXPerwira, sameYPosition + spacingAboveName, paint
+    )
+
+    // 🟢 KOORDINATOR TERMINAL (LURUS DENGAN PERWIRA)
+    canvas.drawText("KOORDINATOR TERMINAL", centerXKoordinator, sameYPosition, paint)
+
+    val koorBarcode = when (agenda.terminal to agenda.group) {
+        "Terminal Jamrud" to "Group A" -> R.drawable.jamrudgroupa
+        "Terminal Jamrud" to "Group B" -> R.drawable.jamrudgroupb
+        "Terminal Jamrud" to "Group C" -> R.drawable.jamrudgroupc
+        "Terminal Jamrud" to "Group D" -> R.drawable.jamrudgroupd
+//        "Terminal Mirah" to "Group A" -> R.drawable.barcode_koor_mirah_a
+//        "Terminal Mirah" to "Group B" -> R.drawable.barcode_koor_mirah_b
+//        "Terminal Mirah" to "Group C" -> R.drawable.barcode_koor_mirah_c
+//        "Terminal Mirah" to "Group D" -> R.drawable.barcode_koor_mirah_d
+//        "Terminal Nilam" to "Group A" -> R.drawable.barcode_koor_nilam_a
+//        "Terminal Nilam" to "Group B" -> R.drawable.barcode_koor_nilam_b
+//        "Terminal Nilam" to "Group C" -> R.drawable.barcode_koor_nilam_c
+//        "Terminal Nilam" to "Group D" -> R.drawable.barcode_koor_nilam_d
+        else -> null
+    }
+
+    koorBarcode?.let {
+        val barcodeBitmap = BitmapFactory.decodeResource(activity.resources, it)
+        val scaledBarcode = Bitmap.createScaledBitmap(barcodeBitmap, barcodeSizePx, barcodeSizePx, false)
+        canvas.drawBitmap(scaledBarcode, centerXKoordinator - barcodeSizePx / 2, sameYPosition + barcodeOffsetY, null) // ✅ Barcode tetap center
+    }
+
+    canvas.drawText("(${agenda.koordinator ?: "-"})", centerXKoordinator, sameYPosition + spacingAboveName, paint)
+
+    pdfDocument.finishPage(secondPage)
 
     val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
     val fileName = "SafetyBriefing_${agenda.terminal}_$timeStamp.pdf"
-
     val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
     val file = File(downloadsDir, fileName)
 
@@ -1001,21 +1065,38 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
             }
         }
 
+        Spacer(modifier = Modifier.height(150.dp))
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 12.dp),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            // Kolom Perwira Briefing
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("PERWIRA BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
-                Spacer(modifier = Modifier.height(40.dp)) // Ruang untuk tanda tangan
+                Spacer(modifier = Modifier.height(5.dp))
+
+//                val barcodePerwiraRes = when (agenda?.terminal) {
+//                    "Terminal Jamrud" -> R.drawable.barcode_anton
+//                    "Terminal Mirah" -> R.drawable.barcode_dimas
+//                    "Terminal Nilam" -> R.drawable.barcode_budi
+//                    else -> {}
+//                }
+//
+//                Image(
+//                    painter = painterResource(id = barcodePerwiraRes),
+//                    contentDescription = "Barcode tanda tangan perwira",
+//                    modifier = Modifier.size(50.dp)
+//                )
+
+                Spacer(modifier = Modifier.height(5.dp)) // Ruang untuk tanda tangan
                 Text(
                     text = when (agenda?.terminal) {
                         "Terminal Jamrud" -> "(Anton Yudhiana)"
-                        "Terminal Mirah", "Terminal Nilam" -> "(Dimas Wibowo)"
+                        "Terminal Mirah" -> "(Dimas Wibowo)"
+                        "Terminal Nilam" -> "(Dimas Wibowo)"
                         else -> "(Nama Tidak Diketahui)"
                     },
                     fontSize = 7.sp,
@@ -1023,11 +1104,40 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 )
             }
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("KOORDINATOR BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
-                Spacer(modifier = Modifier.height(40.dp)) // Ruang untuk tanda tangan
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("KOORDINATOR TERMINAL", fontSize = 7.sp, fontWeight = FontWeight.Normal)
+                Spacer(modifier = Modifier.height(5.dp))
+
+                // Pengkondisian Barcode Koordinator berdasarkan Terminal & Group
+                val barcodeKoorRes: Int? = when (agenda?.terminal to agenda?.group) {
+                    "Terminal Jamrud" to "Group A" -> R.drawable.jamrudgroupa
+                    "Terminal Jamrud" to "Group B" -> R.drawable.jamrudgroupb
+                    "Terminal Jamrud" to "Group C" -> R.drawable.jamrudgroupc
+                    "Terminal Jamrud" to "Group D" -> R.drawable.jamrudgroupd
+
+//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "A" -> R.drawable.barcode_koor_mirah_a
+//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "B" -> R.drawable.barcode_koor_mirah_b
+//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "C" -> R.drawable.barcode_koor_mirah_c
+//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "D" -> R.drawable.barcode_koor_mirah_d
+//
+//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "A" -> R.drawable.barcode_koor_nilam_a
+//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "B" -> R.drawable.barcode_koor_nilam_b
+//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "C" -> R.drawable.barcode_koor_nilam_c
+//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "D" -> R.drawable.barcode_koor_nilam_d
+
+
+                    else -> null
+                }
+
+                barcodeKoorRes?.let {
+                    Image(
+                        painter = painterResource(id = it),
+                        contentDescription = "Barcode tanda tangan koordinator",
+                        modifier = Modifier.size(50.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(5.dp)) // Ruang untuk tanda tangan
                 Text(
                     text = "(${agenda?.koordinator ?: "-"})",
                     fontSize = 7.sp,
@@ -1905,21 +2015,38 @@ fun UnduhPdfScreen(briefingId: String) {
             }
         }
 
+        Spacer(modifier = Modifier.height(150.dp))
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 12.dp),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            // Kolom Perwira Briefing
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("PERWIRA BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
-                Spacer(modifier = Modifier.height(40.dp)) // Ruang untuk tanda tangan
+                Spacer(modifier = Modifier.height(5.dp))
+
+//                val barcodePerwiraRes = when (agenda?.terminal) {
+//                    "Terminal Jamrud" -> R.drawable.barcode_anton
+//                    "Terminal Mirah" -> R.drawable.barcode_dimas
+//                    "Terminal Nilam" -> R.drawable.barcode_budi
+//                    else -> {}
+//                }
+//
+//                Image(
+//                    painter = painterResource(id = barcodePerwiraRes),
+//                    contentDescription = "Barcode tanda tangan perwira",
+//                    modifier = Modifier.size(50.dp)
+//                )
+
+                Spacer(modifier = Modifier.height(5.dp)) // Ruang untuk tanda tangan
                 Text(
                     text = when (agenda?.terminal) {
                         "Terminal Jamrud" -> "(Anton Yudhiana)"
-                        "Terminal Mirah", "Terminal Nilam" -> "(Dimas Wibowo)"
+                        "Terminal Mirah" -> "(Dimas Wibowo)"
+                        "Terminal Nilam" -> "(Dimas Wibowo)"
                         else -> "(Nama Tidak Diketahui)"
                     },
                     fontSize = 7.sp,
@@ -1927,11 +2054,40 @@ fun UnduhPdfScreen(briefingId: String) {
                 )
             }
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("KOORDINATOR BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
-                Spacer(modifier = Modifier.height(40.dp)) // Ruang untuk tanda tangan
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("KOORDINATOR TERMINAL", fontSize = 7.sp, fontWeight = FontWeight.Normal)
+                Spacer(modifier = Modifier.height(5.dp))
+
+                // Pengkondisian Barcode Koordinator berdasarkan Terminal & Group
+                val barcodeKoorRes: Int? = when (agenda?.terminal to agenda?.group) {
+                    "Terminal Jamrud" to "Group A" -> R.drawable.jamrudgroupa
+                    "Terminal Jamrud" to "Group B" -> R.drawable.jamrudgroupb
+                    "Terminal Jamrud" to "Group C" -> R.drawable.jamrudgroupc
+                    "Terminal Jamrud" to "Group D" -> R.drawable.jamrudgroupd
+
+//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "A" -> R.drawable.barcode_koor_mirah_a
+//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "B" -> R.drawable.barcode_koor_mirah_b
+//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "C" -> R.drawable.barcode_koor_mirah_c
+//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "D" -> R.drawable.barcode_koor_mirah_d
+//
+//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "A" -> R.drawable.barcode_koor_nilam_a
+//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "B" -> R.drawable.barcode_koor_nilam_b
+//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "C" -> R.drawable.barcode_koor_nilam_c
+//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "D" -> R.drawable.barcode_koor_nilam_d
+
+
+                    else -> null
+                }
+
+                barcodeKoorRes?.let {
+                    Image(
+                        painter = painterResource(id = it),
+                        contentDescription = "Barcode tanda tangan koordinator",
+                        modifier = Modifier.size(50.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(5.dp)) // Ruang untuk tanda tangan
                 Text(
                     text = "(${agenda?.koordinator ?: "-"})",
                     fontSize = 7.sp,
