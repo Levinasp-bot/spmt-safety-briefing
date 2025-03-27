@@ -25,6 +25,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import com.google.firebase.firestore.Source
 
 class LoginActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
@@ -55,10 +56,10 @@ class LoginActivity : ComponentActivity() {
         val db = FirebaseFirestore.getInstance()
         val auth = FirebaseAuth.getInstance()
 
-        db.collection("users").whereEqualTo("noEmployee", nipp).limit(1).get()
+        db.collection("users").whereEqualTo("noEmployee", nipp.trim()).limit(1).get(Source.SERVER)
             .addOnSuccessListener { documents ->
                 if (!documents.isEmpty) {
-                    val userDoc = documents.documents[0] // Ambil dokumen pertama yang cocok
+                    val userDoc = documents.documents[0]
                     val email = userDoc.getString("email") ?: ""
 
                     if (email.isNotBlank()) {

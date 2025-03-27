@@ -159,7 +159,7 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
         try {
             // 🔹 Ambil dokumen terbaru dari koleksi agenda (sesuai kebutuhan)
             val agendaDocs = firestore.collection("agenda")
-                .orderBy("timestamp", Query.Direction.DESCENDING) // Sesuaikan dengan field tanggal
+                .orderBy("timestamp", Query.Direction.ASCENDING) // Sesuaikan dengan field tanggal
                 .get()
                 .await()
 
@@ -290,7 +290,7 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
 
             val userDocs = try {
                 firestore.collection("users")
-                    .limit(100) // Tambahkan limit lebih besar dari jumlah user yang ada
+                    .limit(300) // Tambahkan limit lebih besar dari jumlah user yang ada
                     .get()
                     .await()
                     .documents

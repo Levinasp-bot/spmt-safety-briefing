@@ -408,6 +408,7 @@ class RegisterActivity : ComponentActivity() {
                     .addOnCompleteListener { task ->
                         if (!task.isSuccessful) {
                             Log.e("FCM", "Fetching FCM token failed", task.exception)
+                            Toast.makeText(this, "Gagal mendapatkan FCM Token", Toast.LENGTH_SHORT).show()
                             return@addOnCompleteListener
                         }
                         val fcmToken = task.result
@@ -434,7 +435,7 @@ class RegisterActivity : ComponentActivity() {
                             .set(userMap)
                             .addOnSuccessListener {
                                 val toastMessage = if (isManagerOperasi) {
-                                    "Registrasi Berhasil" // ✅ Jika Manager Operasi
+                                    "Registrasi Berhasil"
                                 } else {
                                     "Menunggu persetujuan Manager Terminal."
                                 }
@@ -451,6 +452,9 @@ class RegisterActivity : ComponentActivity() {
                                 ).show()
                             }
                     }
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, "Registrasi gagal: ${e.message}", Toast.LENGTH_SHORT).show()
             }
     }
 

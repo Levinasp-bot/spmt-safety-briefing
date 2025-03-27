@@ -948,7 +948,6 @@ class HomeActivity : ComponentActivity() {
                                     context.startActivity(intent)
 
                                 } else {
-                                    // Hapus data absensi jika wajah tidak cocok
                                     firestore.collection("agenda").document(briefingId)
                                         .collection("attendance").document(attendanceId)
                                         .delete()
@@ -959,7 +958,6 @@ class HomeActivity : ComponentActivity() {
                                             Log.e("FaceRecognition", "Gagal menghapus data attendance $attendanceId.")
                                         }
 
-                                    // Arahkan ke halaman gagal absensi
                                     val intent = Intent(context, GagalAbsensiActivity::class.java)
                                     context.startActivity(intent)
 

@@ -161,9 +161,9 @@ fun saveBitmapAsPdf(activity: ComponentActivity, bitmap: Bitmap, agenda: Agenda_
     canvas.drawText("PERWIRA BRIEFING", centerXPerwira, sameYPosition, paint)
 
     val perwiraBarcode = when (agenda.terminal) {
-//        "Terminal Jamrud" -> R.drawable.barcode_anton
-//        "Terminal Mirah" -> R.drawable.barcode_dimas
-//        "Terminal Nilam" -> R.drawable.barcode_budi
+        "Terminal Jamrud" -> R.drawable.barcode_anton
+        "Terminal Mirah" -> R.drawable.barcode_dimas
+        "Terminal Nilam" -> R.drawable.barcode_dimas
         else -> null
     }
 
@@ -182,22 +182,21 @@ fun saveBitmapAsPdf(activity: ComponentActivity, bitmap: Bitmap, agenda: Agenda_
         centerXPerwira, sameYPosition + spacingAboveName, paint
     )
 
-    // 🟢 KOORDINATOR TERMINAL (LURUS DENGAN PERWIRA)
-    canvas.drawText("KOORDINATOR TERMINAL", centerXKoordinator, sameYPosition, paint)
+    canvas.drawText("KOORDINATOR BRIEFING", centerXKoordinator, sameYPosition, paint)
 
     val koorBarcode = when (agenda.terminal to agenda.group) {
         "Terminal Jamrud" to "Group A" -> R.drawable.jamrudgroupa
         "Terminal Jamrud" to "Group B" -> R.drawable.jamrudgroupb
         "Terminal Jamrud" to "Group C" -> R.drawable.jamrudgroupc
         "Terminal Jamrud" to "Group D" -> R.drawable.jamrudgroupd
-//        "Terminal Mirah" to "Group A" -> R.drawable.barcode_koor_mirah_a
-//        "Terminal Mirah" to "Group B" -> R.drawable.barcode_koor_mirah_b
-//        "Terminal Mirah" to "Group C" -> R.drawable.barcode_koor_mirah_c
-//        "Terminal Mirah" to "Group D" -> R.drawable.barcode_koor_mirah_d
-//        "Terminal Nilam" to "Group A" -> R.drawable.barcode_koor_nilam_a
-//        "Terminal Nilam" to "Group B" -> R.drawable.barcode_koor_nilam_b
-//        "Terminal Nilam" to "Group C" -> R.drawable.barcode_koor_nilam_c
-//        "Terminal Nilam" to "Group D" -> R.drawable.barcode_koor_nilam_d
+        "Terminal Mirah" to "Group A" -> R.drawable.mirahgroupa
+        "Terminal Mirah" to "Group B" -> R.drawable.mirahgroupb
+        "Terminal Mirah" to "Group C" -> R.drawable.mirahgroupc
+        "Terminal Mirah" to "Group D" -> R.drawable.mirahgroupd
+        "Terminal Nilam" to "Group A" -> R.drawable.nilamgroupa
+        "Terminal Nilam" to "Group B" -> R.drawable.nilamgroupb
+        "Terminal Nilam" to "Group C" -> R.drawable.nilamgroupc
+        "Terminal Nilam" to "Group D" -> R.drawable.nilamgroupd
         else -> null
     }
 
@@ -1034,7 +1033,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 .border(1.dp, Color.Black)
                 .padding(4.dp)
         ) {
-            // 🔹 Kolom 1: Nama Pekerja Sakit
             Box(
                 modifier = Modifier
                     .weight(2f)
@@ -1073,25 +1071,26 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 .padding(top = 12.dp),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
-            // Kolom Perwira Briefing
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("PERWIRA BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
                 Spacer(modifier = Modifier.height(5.dp))
 
-//                val barcodePerwiraRes = when (agenda?.terminal) {
-//                    "Terminal Jamrud" -> R.drawable.barcode_anton
-//                    "Terminal Mirah" -> R.drawable.barcode_dimas
-//                    "Terminal Nilam" -> R.drawable.barcode_budi
-//                    else -> {}
-//                }
-//
-//                Image(
-//                    painter = painterResource(id = barcodePerwiraRes),
-//                    contentDescription = "Barcode tanda tangan perwira",
-//                    modifier = Modifier.size(50.dp)
-//                )
+                val barcodePerwiraRes: Int? = when (agenda?.terminal) {
+                    "Terminal Jamrud" -> R.drawable.barcode_anton
+                    "Terminal Mirah" -> R.drawable.barcode_dimas
+                    "Terminal Nilam" -> R.drawable.barcode_dimas
+                    else -> null
+                }
 
-                Spacer(modifier = Modifier.height(5.dp)) // Ruang untuk tanda tangan
+                barcodePerwiraRes?.let {
+                    Image(
+                        painter = painterResource(id = it),
+                        contentDescription = "Barcode tanda tangan perwira",
+                        modifier = Modifier.size(50.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(5.dp))
                 Text(
                     text = when (agenda?.terminal) {
                         "Terminal Jamrud" -> "(Anton Yudhiana)"
@@ -1105,26 +1104,22 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
             }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("KOORDINATOR TERMINAL", fontSize = 7.sp, fontWeight = FontWeight.Normal)
+                Text("KOORDINATOR BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
                 Spacer(modifier = Modifier.height(5.dp))
 
-                // Pengkondisian Barcode Koordinator berdasarkan Terminal & Group
                 val barcodeKoorRes: Int? = when (agenda?.terminal to agenda?.group) {
                     "Terminal Jamrud" to "Group A" -> R.drawable.jamrudgroupa
                     "Terminal Jamrud" to "Group B" -> R.drawable.jamrudgroupb
                     "Terminal Jamrud" to "Group C" -> R.drawable.jamrudgroupc
                     "Terminal Jamrud" to "Group D" -> R.drawable.jamrudgroupd
-
-//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "A" -> R.drawable.barcode_koor_mirah_a
-//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "B" -> R.drawable.barcode_koor_mirah_b
-//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "C" -> R.drawable.barcode_koor_mirah_c
-//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "D" -> R.drawable.barcode_koor_mirah_d
-//
-//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "A" -> R.drawable.barcode_koor_nilam_a
-//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "B" -> R.drawable.barcode_koor_nilam_b
-//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "C" -> R.drawable.barcode_koor_nilam_c
-//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "D" -> R.drawable.barcode_koor_nilam_d
-
+                    "Terminal Mirah" to "Group A" -> R.drawable.mirahgroupa
+                    "Terminal Mirah" to "Group B" -> R.drawable.mirahgroupb
+                    "Terminal Mirah" to "Group C" -> R.drawable.mirahgroupc
+                    "Terminal Mirah" to "Group D" -> R.drawable.mirahgroupd
+                    "Terminal Nilam" to "Group A" -> R.drawable.nilamgroupa
+                    "Terminal Nilam" to "Group B" -> R.drawable.nilamgroupb
+                    "Terminal Nilam" to "Group C" -> R.drawable.nilamgroupc
+                    "Terminal Nilam" to "Group D" -> R.drawable.nilamgroupd
 
                     else -> null
                 }
@@ -1227,8 +1222,8 @@ fun UnduhPdfScreen(briefingId: String) {
                     .border(1.dp, Color.Black)
                     .fillMaxHeight()
                     .padding(4.dp)
-                    .align(Alignment.CenterVertically), // ✅ Agar sejajar dengan lainnya
-                verticalArrangement = Arrangement.spacedBy(4.dp) // ✅ Jarak antar teks lebih proporsional
+                    .align(Alignment.CenterVertically),
+                verticalArrangement = Arrangement.spacedBy(4.dp) 
             ) {
                 Text("No Dokumen: ", fontSize = 6.sp, fontWeight = FontWeight.Normal)
                 Divider(color = Color.Black, thickness = 1.dp)
@@ -2028,18 +2023,20 @@ fun UnduhPdfScreen(briefingId: String) {
                 Text("PERWIRA BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
                 Spacer(modifier = Modifier.height(5.dp))
 
-//                val barcodePerwiraRes = when (agenda?.terminal) {
-//                    "Terminal Jamrud" -> R.drawable.barcode_anton
-//                    "Terminal Mirah" -> R.drawable.barcode_dimas
-//                    "Terminal Nilam" -> R.drawable.barcode_budi
-//                    else -> {}
-//                }
-//
-//                Image(
-//                    painter = painterResource(id = barcodePerwiraRes),
-//                    contentDescription = "Barcode tanda tangan perwira",
-//                    modifier = Modifier.size(50.dp)
-//                )
+                val barcodePerwiraRes: Int? = when (agenda?.terminal) {
+                    "Terminal Jamrud" -> R.drawable.barcode_anton
+                    "Terminal Mirah" -> R.drawable.barcode_dimas
+                    "Terminal Nilam" -> R.drawable.barcode_dimas
+                    else -> null // ✅ Gunakan null untuk kondisi default
+                }
+
+                barcodePerwiraRes?.let {
+                    Image(
+                        painter = painterResource(id = it),
+                        contentDescription = "Barcode tanda tangan perwira",
+                        modifier = Modifier.size(50.dp)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(5.dp)) // Ruang untuk tanda tangan
                 Text(
@@ -2055,7 +2052,7 @@ fun UnduhPdfScreen(briefingId: String) {
             }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("KOORDINATOR TERMINAL", fontSize = 7.sp, fontWeight = FontWeight.Normal)
+                Text("KOORDINATOR BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
                 Spacer(modifier = Modifier.height(5.dp))
 
                 // Pengkondisian Barcode Koordinator berdasarkan Terminal & Group
@@ -2064,18 +2061,14 @@ fun UnduhPdfScreen(briefingId: String) {
                     "Terminal Jamrud" to "Group B" -> R.drawable.jamrudgroupb
                     "Terminal Jamrud" to "Group C" -> R.drawable.jamrudgroupc
                     "Terminal Jamrud" to "Group D" -> R.drawable.jamrudgroupd
-
-//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "A" -> R.drawable.barcode_koor_mirah_a
-//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "B" -> R.drawable.barcode_koor_mirah_b
-//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "C" -> R.drawable.barcode_koor_mirah_c
-//                    agenda?.terminal == "Terminal Mirah" && agenda!!.group == "D" -> R.drawable.barcode_koor_mirah_d
-//
-//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "A" -> R.drawable.barcode_koor_nilam_a
-//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "B" -> R.drawable.barcode_koor_nilam_b
-//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "C" -> R.drawable.barcode_koor_nilam_c
-//                    agenda?.terminal == "Terminal Nilam" && agenda!!.group == "D" -> R.drawable.barcode_koor_nilam_d
-
-
+                    "Terminal Mirah" to "Group A" -> R.drawable.mirahgroupa
+                    "Terminal Mirah" to "Group B" -> R.drawable.mirahgroupb
+                    "Terminal Mirah" to "Group C" -> R.drawable.mirahgroupc
+                    "Terminal Mirah" to "Group D" -> R.drawable.mirahgroupd
+                    "Terminal Nilam" to "Group A" -> R.drawable.nilamgroupa
+                    "Terminal Nilam" to "Group B" -> R.drawable.nilamgroupb
+                    "Terminal Nilam" to "Group C" -> R.drawable.nilamgroupc
+                    "Terminal Nilam" to "Group D" -> R.drawable.nilamgroupd
                     else -> null
                 }
 

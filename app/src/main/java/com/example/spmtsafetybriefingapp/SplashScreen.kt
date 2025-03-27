@@ -28,28 +28,41 @@ class SplashActivity : ComponentActivity() {
     private val currentVersion = BuildConfig.VERSION_NAME // 🔹 Ambil versi dari build.gradle
 
     private val permissions = mutableListOf(
-        Manifest.permission.ACCESS_FINE_LOCATION
+        Manifest.permission.ACCESS_FINE_LOCATION // 🔹 Lokasi tetap diminta, tapi opsional
     ).apply {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            add(Manifest.permission.NEARBY_WIFI_DEVICES) // 🔥 Wajib untuk lokasi berbasis WiFi/Bluetooth di Android 13+
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            add(Manifest.permission.WRITE_EXTERNAL_STORAGE) // 🔹 Opsional untuk Android < 10
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            add(Manifest.permission.READ_MEDIA_IMAGES)
+            add(Manifest.permission.READ_MEDIA_IMAGES) // 🔹 Opsional untuk Android 13+
         } else {
-            add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            add(Manifest.permission.READ_EXTERNAL_STORAGE) // 🔹 Opsional untuk Android 12 ke bawah
         }
     }.toTypedArray()
 
     private val permissionRequest = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val allGranted = permissions.values.all { it }
-        if (allGranted) {
-            checkForUpdate()
-        } else {
-            Toast.makeText(this, "Izin diperlukan untuk menggunakan aplikasi", Toast.LENGTH_LONG).show()
-            finish()
+        val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.NEARBY_WIFI_DEVICES] == true
+
+        val storageGranted = permissions[Manifest.permission.WRITE_EXTERNAL_STORAGE] == true ||
+                permissions[Manifest.permission.READ_EXTERNAL_STORAGE] == true ||
+                permissions[Manifest.permission.READ_MEDIA_IMAGES] == true
+
+        checkForUpdate()
+
+        if (!locationGranted) {
+            Toast.makeText(this, "Izin lokasi tidak diberikan, beberapa fitur mungkin terbatas", Toast.LENGTH_SHORT).show()
         }
+
+        if (!storageGranted) {
+            Toast.makeText(this, "Izin penyimpanan tidak diberikan, beberapa fitur mungkin terbatas", Toast.LENGTH_SHORT).show()
+        }
+
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -110,7 +123,6 @@ class SplashActivity : ComponentActivity() {
                 goToMainActivity()
             }
     }
-
 
     private fun isUpdateRequired(current: String, latest: String): Boolean {
         val currentParts = current.split(".").map { it.toIntOrNull() ?: 0 }
