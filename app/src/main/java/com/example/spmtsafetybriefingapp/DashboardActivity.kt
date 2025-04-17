@@ -155,28 +155,52 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
         Log.d("Firestore", "🔄 SideEffect Triggered! Current selectedShift: $selectedShift")
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(selectedDate) {
         try {
-            // 🔹 Ambil dokumen terbaru dari koleksi agenda (sesuai kebutuhan)
+            val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+            val selectedDateStart = sdf.parse(selectedDate) ?: return@LaunchedEffect
+            val calendar = Calendar.getInstance().apply {
+                time = selectedDateStart
+                add(Calendar.DAY_OF_MONTH, 1)
+            }
+            val selectedDateEnd = calendar.time
+
+            val startTimestamp = Timestamp(selectedDateStart)
+            val endTimestamp = Timestamp(selectedDateEnd)
+
             val agendaDocs = firestore.collection("agenda")
-                .orderBy("timestamp", Query.Direction.ASCENDING) // Sesuaikan dengan field tanggal
+                .whereGreaterThanOrEqualTo("timestamp", startTimestamp)
+                .whereLessThan("timestamp", endTimestamp)
                 .get()
                 .await()
 
-            if (!agendaDocs.isEmpty) {
-                val agendaDoc = agendaDocs.documents.first()
-                briefingId = agendaDoc.id // Simpan briefingId
-
-                // 🔹 Ambil daftar nama pengguna dari field cuti, sakit, dan izin
-                cutiList = (agendaDoc.get("cuti") as? List<String>)?.toSet() ?: emptySet()
-                sakitList = (agendaDoc.get("sakit") as? List<String>)?.toSet() ?: emptySet()
-                izinList = (agendaDoc.get("izin") as? List<String>)?.toSet() ?: emptySet()
-
-                Log.d("Firestore", "Briefing ID: $briefingId")
-                Log.d("Firestore", "Cuti: $cutiList, Sakit: $sakitList, Izin: $izinList")
+            if (agendaDocs.isEmpty) {
+                Log.d("Firestore", "❌ Tidak ada agenda ditemukan pada $selectedDate")
+                cutiList = emptySet()
+                sakitList = emptySet()
+                izinList = emptySet()
+                return@LaunchedEffect
             }
+
+            cutiList = agendaDocs.documents
+                .flatMap { it.get("cuti") as? List<String> ?: emptyList() }
+                .toSet()
+
+            sakitList = agendaDocs.documents
+                .flatMap { it.get("sakit") as? List<String> ?: emptyList() }
+                .toSet()
+
+            izinList = agendaDocs.documents
+                .flatMap { it.get("izin") as? List<String> ?: emptyList() }
+                .toSet()
+
+            Log.d("Firestore", "✅ Agenda ditemukan: ${agendaDocs.size()}")
+            Log.d("Firestore", "📌 Cuti: $cutiList")
+            Log.d("Firestore", "📌 Sakit: $sakitList")
+            Log.d("Firestore", "📌 Izin: $izinList")
+
         } catch (e: Exception) {
-            Log.e("Firestore", "Error mengambil data agenda", e)
+            Log.e("Firestore", "❗Gagal mengambil data agenda: ${e.message}", e)
         }
     }
 
@@ -642,7 +666,6 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
                                     timestamp != null -> "Hadir"
                                     else -> "Tanpa Keterangan"
                                 }
-
 
                                 Column(
                                     modifier = Modifier

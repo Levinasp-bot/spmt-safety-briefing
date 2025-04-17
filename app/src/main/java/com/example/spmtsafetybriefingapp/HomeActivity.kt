@@ -569,13 +569,14 @@ class HomeActivity : ComponentActivity() {
             }
         }
 
-
         LaunchedEffect(userId) {
             if (userId.isNotEmpty()) {
                 val userDoc = firestore.collection("users").document(userId).get().await()
                 userName = userDoc.getString("name") ?: "User"
             }
         }
+
+        val coroutineScope = rememberCoroutineScope()
 
         val takePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
             if (bitmap != null) {
@@ -587,23 +588,41 @@ class HomeActivity : ComponentActivity() {
                         val embedding = getFaceEmbedding(croppedFace)
                         val embeddingList = embedding?.toList() ?: emptyList()
 
+                        val currentUser = FirebaseAuth.getInstance().currentUser
+                        val userId = currentUser?.uid.orEmpty()
+
                         if (userId.isNotEmpty()) {
-                            val attendanceRef = firestore.collection("agenda").document(briefingId)
-                                .collection("attendance").document()
+                            coroutineScope.launch {
+                                try {
+                                    val userDoc = firestore.collection("users").document(userId).get().await()
+                                    val userName = userDoc.getString("name") ?: "Unknown"
 
-                            val attendanceData = mapOf(
-                                "userId" to userId,
-                                "userName" to userName,
-                                "timestamp" to FieldValue.serverTimestamp(),
-                                "photoUri" to newUri.toString(),
-                                "faceEmbedding" to embeddingList
-                            )
+                                    val attendanceRef = firestore.collection("agenda").document(briefingId)
+                                        .collection("attendance").document()
 
-                            attendanceRef.set(attendanceData)
-                                .addOnSuccessListener {
-                                    Log.d("Firestore", "Data absensi berhasil disimpan")
-                                    compareFaceEmbeddings(userId, briefingId, attendanceRef.id, context)
+                                    val attendanceData = mapOf(
+                                        "userId" to userId,
+                                        "userName" to userName,
+                                        "timestamp" to FieldValue.serverTimestamp(),
+                                        "photoUri" to newUri.toString(),
+                                        "faceEmbedding" to embeddingList
+                                    )
+
+                                    attendanceRef.set(attendanceData)
+                                        .addOnSuccessListener {
+                                            Log.d("Firestore", "✅ Data absensi berhasil disimpan")
+                                            compareFaceEmbeddings(userId, briefingId, attendanceRef.id, context)
+                                        }
+                                        .addOnFailureListener {
+                                            Log.e("Firestore", "❌ Gagal menyimpan absensi", it)
+                                        }
+                                } catch (e: Exception) {
+                                    Log.e("Firestore", "❌ Error saat mengambil nama user atau menyimpan data", e)
+                                    Toast.makeText(context, "Gagal menyimpan data absensi", Toast.LENGTH_SHORT).show()
                                 }
+                            }
+                        } else {
+                            Toast.makeText(context, "User belum login!", Toast.LENGTH_SHORT).show()
                         }
                     } else {
                         Toast.makeText(context, "Wajah tidak terdeteksi!", Toast.LENGTH_SHORT).show()

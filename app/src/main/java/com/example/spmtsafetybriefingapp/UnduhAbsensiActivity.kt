@@ -145,12 +145,22 @@ fun generatePdf(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
 
+                val tanpaKeteranganCount = filteredUsers.count { user ->
+                    user !in cutiList && user !in sakitList && user !in izinList &&
+                            attendanceList.none { it.first == user }
+                }
                 // 🔹 Informasi Terminal, Shift, dan Tanggal
                 Column(modifier = Modifier.fillMaxWidth()) {
                     InfoRow("Terminal:", selectedTerminal, fontSize = 10.sp)
                     InfoRow("Shift:", selectedShift, fontSize = 10.sp)
                     InfoRow("Tanggal:", selectedDate, fontSize = 10.sp)
+                    InfoRow("Hadir:", presentUsers.toString(), fontSize = 10.sp)
+                    InfoRow("Cuti:", cutiList.size.toString(), fontSize = 10.sp)
+                    InfoRow("Izin:", izinList.size.toString(), fontSize = 10.sp)
+                    InfoRow("Sakit:", sakitList.size.toString(), fontSize = 10.sp)
+                    InfoRow("Tanpa Keterangan:", tanpaKeteranganCount.toString(), fontSize = 10.sp)
                 }
+
                 Spacer(modifier = Modifier.height(6.dp))
 
                 // 🔹 Tabel Absensi
@@ -277,7 +287,7 @@ fun saveBitmap(activity: ComponentActivity, bitmap: Bitmap, totalRows: Int) {
     )
 
     val scalePercentage = 0.96f
-    val finalScaleFactor = maxScaleFactor * scalePercentage
+    val finalScaleFactor = pageWidth.toFloat() / bitmap.width.toFloat() * 0.96f
 
     val scaledWidth = (bitmap.width * finalScaleFactor).toInt()
     val scaledHeight = (bitmap.height * finalScaleFactor).toInt()
@@ -330,7 +340,6 @@ fun saveBitmap(activity: ComponentActivity, bitmap: Bitmap, totalRows: Int) {
     Toast.makeText(activity, "PDF berhasil disimpan di ${file.absolutePath}", Toast.LENGTH_LONG).show()
 }
 
-
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun UnduhPdfAbsensi(
@@ -364,15 +373,20 @@ fun UnduhPdfAbsensi(
             modifier = Modifier.fillMaxWidth()
         )
 
-        // 🔹 Informasi Terminal, Shift, dan Tanggal (Dibuat Vertikal)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp) // Beri jarak dari judul
-        ) {
-            Text(text = "Terminal: $selectedTerminal", fontSize = 10.sp, color = Color.Black)
-            Text(text = "Shift: $selectedShift", fontSize = 10.sp, color = Color.Black)
-            Text(text = "Tanggal: $selectedDate", fontSize = 10.sp, color = Color.Black)
+        val tanpaKeteranganCount = filteredUsers.count { user ->
+            user !in cutiList && user !in sakitList && user !in izinList &&
+                    attendanceList.none { it.first == user }
+        }
+        // 🔹 Informasi Terminal, Shift, dan Tanggal
+        Column(modifier = Modifier.fillMaxWidth()) {
+            InfoRow("Terminal:", selectedTerminal, fontSize = 10.sp)
+            InfoRow("Shift:", selectedShift, fontSize = 10.sp)
+            InfoRow("Tanggal:", selectedDate, fontSize = 10.sp)
+            InfoRow("Hadir:", presentUsers.toString(), fontSize = 10.sp)
+            InfoRow("Cuti:", cutiList.size.toString(), fontSize = 10.sp)
+            InfoRow("Izin:", izinList.size.toString(), fontSize = 10.sp)
+            InfoRow("Sakit:", sakitList.size.toString(), fontSize = 10.sp)
+            InfoRow("Tanpa Keterangan:", tanpaKeteranganCount.toString(), fontSize = 10.sp)
         }
 
         Spacer(modifier = Modifier.height(8.dp)) // 🔹 Tambahkan jarak sebelum tabel
