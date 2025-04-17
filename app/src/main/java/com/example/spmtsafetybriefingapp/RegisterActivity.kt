@@ -70,23 +70,27 @@ class RegisterActivity : ComponentActivity() {
         }
 
         setContent {
-            RegisterScreen { noEmployee, email, password, name, role, group, terminal, imageUri, faceEmbedding ->
+            RegisterScreen { noEmployee, email, password, name, role, group, branch, terminal, imageUri, faceEmbedding ->
                 if (noEmployee.isBlank() || password.isBlank() || name.isBlank() || role.isBlank() ||  terminal.isBlank()) {
                     Toast.makeText(this, "Semua kolom harus diisi!", Toast.LENGTH_SHORT).show()
                     return@RegisterScreen
                 }
-                registerUser(noEmployee, email, password, name, role, group, terminal, imageUri, faceEmbedding)
+                registerUser(noEmployee, email, password, name, role, group, branch, terminal, imageUri, faceEmbedding)
             }
         }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun RegisterScreen(onRegisterClick: (String, String, String, String, String, String?, String, Uri?, List<Float>?) -> Unit) {
+    fun RegisterScreen(onRegisterClick: (String, String, String, String, String, String, String?, String, Uri?, List<Float>?) -> Unit) {
         var password by remember { mutableStateOf("") }
+        var confirmPassword by remember { mutableStateOf("") }
         var name by remember { mutableStateOf("") }
         var noEmployee by remember { mutableStateOf("") }
         var email by remember { mutableStateOf("") }
+        val branchOptions = listOf("Jamrud Nilam Mirah")
+        var branch by remember { mutableStateOf(branchOptions.first()) }
+
         val terminalOptions = listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah")
         var terminal by remember { mutableStateOf(terminalOptions.first()) }
 
@@ -170,6 +174,7 @@ class RegisterActivity : ComponentActivity() {
                 )
             )
 
+            DropdownMenuComponent("Branch", branchOptions, branch) { branch = it }
             DropdownMenuComponent("Terminal", terminalOptions, terminal) { terminal = it }
             DropdownMenuComponent("Jabatan", roleOptions, role) { role = it }
 
@@ -178,6 +183,8 @@ class RegisterActivity : ComponentActivity() {
             }
 
             var passwordVisible by remember { mutableStateOf(false) }
+            var confirmPasswordVisible by remember { mutableStateOf(false) }
+            val passwordsMatch = password == confirmPassword
 
             OutlinedTextField(
                 value = password,
@@ -196,6 +203,33 @@ class RegisterActivity : ComponentActivity() {
                             contentDescription = if (passwordVisible) "Hide password" else "Show password",
                             tint = primaryColor
                         )
+                    }
+                }
+            )
+
+            OutlinedTextField(
+                value = confirmPassword,
+                onValueChange = { confirmPassword = it },
+                label = { Text("Konfirmasi Password", color = primaryColor) },
+                visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    focusedBorderColor = primaryColor,
+                    unfocusedBorderColor = primaryColor
+                ),
+                trailingIcon = {
+                    IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                        Icon(
+                            imageVector = if (confirmPasswordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                            contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password",
+                            tint = primaryColor
+                        )
+                    }
+                },
+                isError = confirmPassword.isNotEmpty() && !passwordsMatch,
+                supportingText = {
+                    if (confirmPassword.isNotEmpty() && !passwordsMatch) {
+                        Text("Password tidak cocok", color = Color.Red, fontSize = 12.sp)
                     }
                 }
             )
@@ -224,7 +258,7 @@ class RegisterActivity : ComponentActivity() {
             }
 
             var usersExceptionList by remember { mutableStateOf<List<String>>(emptyList()) }
-            var nippUser by remember { mutableStateOf("") }  // ✅ Tambahkan state untuk menyimpan NIPP pengguna
+            var nippUser by remember { mutableStateOf("") }
 
             LaunchedEffect(Unit) {
                 try {
@@ -239,6 +273,27 @@ class RegisterActivity : ComponentActivity() {
                 onClick = {
                     val isUserException = nippUser in usersExceptionList // Cek apakah NIPP ada di daftar pengecualian
 
+                    // Validasi input kosong
+                    if (noEmployee.isBlank() ||
+                        email.isBlank() ||
+                        password.isBlank() ||
+                        confirmPassword.isBlank() ||
+                        name.isBlank() ||
+                        role.isBlank() ||
+                        branch.isBlank() ||
+                        terminal.isBlank() ||
+                        (showGroupDropdown && group.isBlank())
+                    ) {
+                        Toast.makeText(context, "Semua field harus diisi", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+
+                    // Validasi password harus sama
+                    if (password != confirmPassword) {
+                        Toast.makeText(context, "Password dan konfirmasi password tidak cocok", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    
                     if (imageUri == null && !isUserException) {
                         Toast.makeText(context, "Foto wajah belum diambil", Toast.LENGTH_SHORT).show()
                         return@Button
@@ -247,7 +302,7 @@ class RegisterActivity : ComponentActivity() {
                     isLoading = true
                     val selectedGroup = if (showGroupDropdown) group else null
                     onRegisterClick(
-                        noEmployee, email, password, name, role, selectedGroup, terminal, imageUri, faceEmbedding
+                        noEmployee, email, password, name, role, branch, selectedGroup, terminal, imageUri, faceEmbedding
                     )
                 },
                 modifier = Modifier
@@ -397,6 +452,7 @@ class RegisterActivity : ComponentActivity() {
         name: String,
         role: String,
         group: String?,
+        branch: String?,
         terminal: String,
         imageUri: Uri?,
         faceEmbedding: List<Float>?
@@ -424,6 +480,7 @@ class RegisterActivity : ComponentActivity() {
                             "role" to role,
                             "group" to group,
                             "noEmployee" to noEmployee,
+
                             "terminal" to terminal,
                             "faceEmbedding" to faceEmbedding,
                             "isApproved" to isManagerOperasi,
