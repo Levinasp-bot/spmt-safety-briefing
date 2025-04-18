@@ -16,10 +16,12 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.example.spmtsafetybriefingapp.ui.theme.SPMTSafetyBriefingAppTheme
 import kotlinx.coroutines.*
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 
@@ -68,13 +70,15 @@ class SplashActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            SPMTSafetyBriefingAppTheme {
+            SPMTSafetyBriefingAppTheme(
+                darkTheme = false,      // ✅ Paksa tema terang
+                dynamicColor = false    // ✅ Nonaktifkan warna dinamis
+            ) {
                 SplashScreen()
             }
         }
         checkPermissions()
     }
-
     private fun checkPermissions() {
         val deniedPermissions = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -157,7 +161,9 @@ class SplashActivity : ComponentActivity() {
 @Composable
 fun SplashScreen() {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White),
         contentAlignment = Alignment.Center
     ) {
         Image(

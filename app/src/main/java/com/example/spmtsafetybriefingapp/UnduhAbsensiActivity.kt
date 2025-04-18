@@ -132,6 +132,7 @@ fun generatePdf(
         setContent {
             Column(
                 modifier = Modifier
+                    .background(Color.White)
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
@@ -361,6 +362,7 @@ fun UnduhPdfAbsensi(
 
     Column(
         modifier = Modifier
+            .background(Color.White)
             .fillMaxSize()
             .padding(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 54.dp)
     ) {

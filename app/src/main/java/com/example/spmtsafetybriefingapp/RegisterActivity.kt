@@ -16,6 +16,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -88,21 +89,64 @@ class RegisterActivity : ComponentActivity() {
         var name by remember { mutableStateOf("") }
         var noEmployee by remember { mutableStateOf("") }
         var email by remember { mutableStateOf("") }
-        val branchOptions = listOf("Jamrud Nilam Mirah")
-        var branch by remember { mutableStateOf(branchOptions.first()) }
+        var branchOptions by remember { mutableStateOf<List<String>>(emptyList()) }
+        var branch by remember { mutableStateOf(branchOptions.firstOrNull() ?: "") }
 
-        val terminalOptions = listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah")
-        var terminal by remember { mutableStateOf(terminalOptions.first()) }
+        LaunchedEffect(Unit) {
+            firestore.collection("branch").get()
+                .addOnSuccessListener { result ->
+                    val branches = result.documents.mapNotNull { it.getString("branch") }
+                    branchOptions = branches
+                    if (branches.isNotEmpty()) {
+                        branch = branches.firstOrNull() ?: ""
+                    }
+                }
+        }
 
-        val roleOptions = listOf("Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi", "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah",
-            "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah", "HSSE", "Koordinator Lapangan Pengamanan",
-             "Anggota Pengamanan", "Operasional", "Komandan Peleton")
-        var role by remember { mutableStateOf(roleOptions.first()) }
+        var terminalOptions by remember { mutableStateOf<List<String>>(emptyList()) }
+        var terminal by remember { mutableStateOf("") }
 
-        val groupOptions = listOf("Group A", "Group B", "Group C", "Group D")
-        var group by remember { mutableStateOf(groupOptions.first()) }
-        val showGroupDropdown = role in listOf("Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah",
-            "Anggota Pengamanan", "Operasional", "Komandan Peleton")
+        LaunchedEffect(branch) {
+            if (branch.isNotBlank()) {
+                firestore.collection("terminal").document(branch).get()
+                    .addOnSuccessListener { document ->
+                        val terminals = document.get("terminal") as? List<String>
+                        terminalOptions = terminals ?: emptyList()
+                        terminal = terminalOptions.firstOrNull() ?: ""
+                    }
+            }
+        }
+
+        var roleOptions by remember { mutableStateOf<List<String>>(emptyList()) }
+        var role by remember { mutableStateOf("") }
+
+        LaunchedEffect(branch) {
+            if (branch.isNotBlank()) {
+                firestore.collection("role").document(branch).get()
+                    .addOnSuccessListener { document ->
+                        val roles = document.get("role") as? List<String>
+                        roleOptions = roles ?: emptyList()
+                        role = roleOptions.firstOrNull() ?: ""
+                    }
+            }
+        }
+
+        var groupOptions by remember { mutableStateOf<List<String>>(emptyList()) }
+        var group by remember { mutableStateOf("") }
+
+        LaunchedEffect(branch) {
+            if (branch.isNotBlank()) {
+                firestore.collection("group").document(branch).get()
+                    .addOnSuccessListener { document ->
+                        val groups = document.get("group") as? List<String>
+                        groupOptions = groups ?: emptyList()
+                        group = groupOptions.firstOrNull() ?: ""
+                    }
+            }
+        }
+
+        val showGroupDropdown = role.startsWith("Koordinator Operasi") ||
+                role in listOf("Anggota Pengamanan", "Operasional", "Komandan Peleton")
         var imageUri by remember { mutableStateOf<Uri?>(null) }
         var faceEmbedding by remember { mutableStateOf<List<Float>?>(null) }
         var isLoading by remember { mutableStateOf(false) }
@@ -131,8 +175,11 @@ class RegisterActivity : ComponentActivity() {
         }
 
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp)
-            .verticalScroll(rememberScrollState()),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(text = "Daftar", fontSize = 24.sp, color = primaryColor)

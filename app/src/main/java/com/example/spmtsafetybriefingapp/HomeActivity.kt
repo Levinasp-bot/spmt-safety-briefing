@@ -31,7 +31,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -44,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
@@ -750,19 +753,19 @@ class HomeActivity : ComponentActivity() {
                         "HSSE"
                     )) {
 
+                    var isLoading by remember { mutableStateOf(false) }
+
                     Button(
                         onClick = {
-                            if (!hasAttended) {
+                            if (!hasAttended && !isLoading) {
+                                isLoading = true
                                 Log.d("AbsensiButton", "Button Absensi ditekan")
 
-                                // **Cek apakah absensi diperbolehkan berdasarkan shift**
                                 selectedShift?.let {
-                                    (context as? androidx.lifecycle.LifecycleOwner)?.lifecycleScope?.launch {
+                                    (context as? LifecycleOwner)?.lifecycleScope?.launch {
                                         val isAllowed = isAttendanceAllowed(selectedShift!!)
-
                                         if (isAllowed) {
-                                            val userId =
-                                                FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
+                                            val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
 
                                             getUserTerminal(firestore, userId) { userTerminal ->
                                                 if (userTerminal != null) {
@@ -774,10 +777,7 @@ class HomeActivity : ComponentActivity() {
                                                                 userTerminal,
                                                                 tempat
                                                             ) { isValid ->
-                                                                Log.d(
-                                                                    "AbsensiButton",
-                                                                    "Status lokasi valid: $isValid"
-                                                                )
+                                                                Log.d("AbsensiButton", "Status lokasi valid: $isValid")
 
                                                                 if (isValid) {
                                                                     val file = File(
@@ -793,35 +793,26 @@ class HomeActivity : ComponentActivity() {
                                                                     takePictureLauncher.launch(null)
                                                                     showInvalidLocation = false
                                                                 } else {
-                                                                    Log.d(
-                                                                        "GeoFence",
-                                                                        "Lokasi tidak valid, tidak bisa melakukan absensi."
-                                                                    )
                                                                     showInvalidLocation = true
                                                                 }
+                                                                isLoading = false
                                                             }
                                                         } else {
-                                                            Log.e(
-                                                                "AbsensiButton",
-                                                                "Gagal mendapatkan lokasi pengguna."
-                                                            )
+                                                            Log.e("AbsensiButton", "Gagal mendapatkan lokasi pengguna.")
                                                             showInvalidLocation = true
+                                                            isLoading = false
                                                         }
                                                     }
                                                 } else {
-                                                    Log.e(
-                                                        "AbsensiButton",
-                                                        "Gagal mendapatkan terminal pengguna."
-                                                    )
+                                                    Log.e("AbsensiButton", "Gagal mendapatkan terminal pengguna.")
                                                     showInvalidLocation = true
+                                                    isLoading = false
                                                 }
                                             }
                                         } else {
-                                            Log.e(
-                                                "AbsensiButton",
-                                                "Waktu absensi tidak sesuai dengan shift atau shift tidak ditemukan."
-                                            )
+                                            Log.e("AbsensiButton", "Waktu absensi tidak sesuai dengan shift.")
                                             showInvalidTime = true
+                                            isLoading = false
                                         }
                                     }
                                 }
@@ -831,12 +822,20 @@ class HomeActivity : ComponentActivity() {
                             .fillMaxWidth()
                             .height(56.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (hasAttended) Color.Gray else Color(0xFF4CAF50)
+                            containerColor = if (hasAttended || isLoading) Color.Gray else Color(0xFF4CAF50)
                         ),
-                        enabled = !hasAttended,
+                        enabled = !hasAttended && !isLoading,
                         shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
                     ) {
-                        Text(if (hasAttended) "Sudah Absen" else "Absensi")
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(text = if (hasAttended) "Sudah Absen" else "Absensi", color = Color.White)
+                        }
                     }
 
                     if (showInvalidLocation) {
@@ -1165,37 +1164,89 @@ class HomeActivity : ComponentActivity() {
     }
 
     @Composable
-    fun DrawerContent(onCloseDrawer: () -> Unit) {
+    fun DrawerContent(
+        onCloseDrawer: () -> Unit,
+        userName: String = "Nama Pengguna",
+        branch: String = "Branch",
+        terminal: String = "Terminal",
+        group: String? = null
+    ) {
         val context = LocalContext.current
         val auth = FirebaseAuth.getInstance()
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Top
+                .padding(16.dp)
+                .background(Color.White),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-
-            Text(
-                text = "Logout",
-                fontSize = 16.sp,
-                color = Color.Red,
-                modifier = Modifier.clickable {
-                    auth.signOut()
-                    onCloseDrawer()
-
-                    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-                    sharedPreferences.edit().putBoolean("is_logged_in", false).apply()
-
-                    val intent = Intent(context, LoginRegisterActivity::class.java)
-                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                    context.startActivity(intent)
-
-                    if (context is HomeActivity) {
-                        context.finish()
+            Column {
+                // Header / User Info
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AccountCircle,
+                        contentDescription = "User Icon",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(text = userName, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text(text = "Branch: $branch", fontSize = 14.sp)
+                        Text(text = "Terminal: $terminal", fontSize = 14.sp)
+                        group?.let {
+                            Text(text = "Group: $it", fontSize = 14.sp)
+                        }
                     }
                 }
-            )
+
+                Divider(color = Color.LightGray, thickness = 1.dp)
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Tambahkan menu lain di sini jika perlu
+            }
+
+            // Logout Button
+            Column {
+                Divider(color = Color.LightGray, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            auth.signOut()
+                            onCloseDrawer()
+
+                            val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                            sharedPreferences.edit().putBoolean("is_logged_in", false).apply()
+
+                            val intent = Intent(context, LoginRegisterActivity::class.java)
+                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            context.startActivity(intent)
+
+                            if (context is HomeActivity) {
+                                context.finish()
+                            }
+                        }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ExitToApp,
+                        contentDescription = "Logout",
+                        tint = Color.Red
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(text = "Logout", color = Color.Red, fontSize = 16.sp)
+                }
+            }
         }
     }
 

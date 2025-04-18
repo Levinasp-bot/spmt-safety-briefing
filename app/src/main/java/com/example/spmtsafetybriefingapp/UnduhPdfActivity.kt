@@ -56,10 +56,18 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import android.graphics.Rect
+import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import android.util.TypedValue
 import androidx.annotation.RequiresApi
+import coil.ImageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 import com.google.firebase.firestore.ListenerRegistration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class UnduhPdfActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
@@ -118,6 +126,22 @@ fun generatePdfFromCompose(activity: ComponentActivity, agenda: Agenda_detail?) 
     }, 500) // Tunggu 500ms agar rendering selesai
 }
 
+suspend fun getBitmapFromUrl(context: Context, url: String): Bitmap? {
+    return withContext(Dispatchers.IO) {
+        try {
+            val loader = ImageLoader(context)
+            val request = ImageRequest.Builder(context)
+                .data(url)
+                .allowHardware(false)
+                .build()
+            val result = (loader.execute(request) as? SuccessResult)?.drawable
+            (result as? BitmapDrawable)?.bitmap
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
+
 fun saveBitmapAsPdf(activity: ComponentActivity, bitmap: Bitmap, agenda: Agenda_detail) {
     val pageHeight = 1800
     val pageWidth = bitmap.width
@@ -156,78 +180,115 @@ fun saveBitmapAsPdf(activity: ComponentActivity, bitmap: Bitmap, agenda: Agenda_
     val sameYPosition = 150f // 🔥 Perwira & Koordinator sejajar
     val barcodeOffsetY = 20f  // Jarak barcode dari teks
     val spacingAboveName = barcodeSizePx + 50f // ✅ Jarak keterangan ke nama lebih besar dari barcode
+    var imageUrl: String? = null
+    val firestore = FirebaseFirestore.getInstance()
 
-    // 🟢 PERWIRA BRIEFING (LURUS DENGAN KOORDINATOR)
-    canvas.drawText("PERWIRA BRIEFING", centerXPerwira, sameYPosition, paint)
-
-    val perwiraBarcode = when (agenda.terminal) {
-        "Terminal Jamrud" -> R.drawable.barcode_anton
-        "Terminal Mirah" -> R.drawable.barcode_dimas
-        "Terminal Nilam" -> R.drawable.barcode_dimas
+    val fieldName = when (agenda.terminal) {
+        "Terminal Jamrud" -> "Jamrud"
+        "Terminal Mirah" -> "Mirah"
+        "Terminal Nilam" -> "Nilam"
         else -> null
     }
 
-    perwiraBarcode?.let {
-        val barcodeBitmap = BitmapFactory.decodeResource(activity.resources, it)
-        val scaledBarcode = Bitmap.createScaledBitmap(barcodeBitmap, barcodeSizePx, barcodeSizePx, false)
-        canvas.drawBitmap(scaledBarcode, centerXPerwira - barcodeSizePx / 2, sameYPosition + barcodeOffsetY, null) // ✅ Barcode tetap center
-    }
 
-    canvas.drawText(
-        when (agenda.terminal) {
-            "Terminal Jamrud" -> "(Anton Yudhiana)"
-            "Terminal Mirah", "Terminal Nilam" -> "(Dimas Wibowo)"
-            else -> "(Nama Tidak Diketahui)"
-        },
-        centerXPerwira, sameYPosition + spacingAboveName, paint
-    )
+    Log.d("FirestoreDebug", "Field Name: $fieldName")
 
-    canvas.drawText("KOORDINATOR BRIEFING", centerXKoordinator, sameYPosition, paint)
+    fieldName?.let { field ->
+        // Mengambil URL gambar (baik untuk tanda tangan maupun barcode)
+        firestore.collection("image").document("ttd_manager").get()
+            .addOnSuccessListener { doc ->
+                Log.d("FirestoreDebug", "Dokumen berhasil diambil dari Firestore")
 
-    val koorBarcode = when (agenda.terminal to agenda.group) {
-        "Terminal Jamrud" to "Group A" -> R.drawable.jamrudgroupa
-        "Terminal Jamrud" to "Group B" -> R.drawable.jamrudgroupb
-        "Terminal Jamrud" to "Group C" -> R.drawable.jamrudgroupc
-        "Terminal Jamrud" to "Group D" -> R.drawable.jamrudgroupd
-        "Terminal Mirah" to "Group A" -> R.drawable.mirahgroupa
-        "Terminal Mirah" to "Group B" -> R.drawable.mirahgroupb
-        "Terminal Mirah" to "Group C" -> R.drawable.mirahgroupc
-        "Terminal Mirah" to "Group D" -> R.drawable.mirahgroupd
-        "Terminal Nilam" to "Group A" -> R.drawable.nilamgroupa
-        "Terminal Nilam" to "Group B" -> R.drawable.nilamgroupb
-        "Terminal Nilam" to "Group C" -> R.drawable.nilamgroupc
-        "Terminal Nilam" to "Group D" -> R.drawable.nilamgroupd
-        else -> null
-    }
+                imageUrl = doc.getString(field)
 
-    koorBarcode?.let {
-        val barcodeBitmap = BitmapFactory.decodeResource(activity.resources, it)
-        val scaledBarcode = Bitmap.createScaledBitmap(barcodeBitmap, barcodeSizePx, barcodeSizePx, false)
-        canvas.drawBitmap(scaledBarcode, centerXKoordinator - barcodeSizePx / 2, sameYPosition + barcodeOffsetY, null) // ✅ Barcode tetap center
-    }
+                Log.d("FirestoreDebug", "imageUrl: $imageUrl")
 
-    canvas.drawText("(${agenda.koordinator ?: "-"})", centerXKoordinator, sameYPosition + spacingAboveName, paint)
+                // Lanjutkan jika URL ditemukan
+                imageUrl?.let { imageLink ->
+                    CoroutineScope(Dispatchers.IO).launch {
+                        // Unduh gambar dari URL
+                        val imageBitmap = getBitmapFromUrl(activity, imageLink)
 
-    pdfDocument.finishPage(secondPage)
+                        Log.d("FirestoreDebug", "imageBitmap: $imageBitmap")
 
-    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-    val fileName = "SafetyBriefing_${agenda.terminal}_$timeStamp.pdf"
-    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-    val file = File(downloadsDir, fileName)
+                        // Pastikan gambar sudah tersedia sebelum menggambar di canvas
+                        withContext(Dispatchers.Main) {
+                            val canvas = secondPage.canvas// Pastikan bitmap untuk canvas sudah ada
 
-    pdfDocument.writeTo(FileOutputStream(file))
-    pdfDocument.close()
+                            // 🟢 PERWIRA BRIEFING (LURUS DENGAN KOORDINATOR)
+                            canvas.drawText("PERWIRA BRIEFING", centerXPerwira, sameYPosition, paint)
 
-    Toast.makeText(activity, "PDF berhasil disimpan di ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                            // Gambar barcode di canvas
+                            imageBitmap?.let { image ->
+                                Log.d("FirestoreDebug", "Gambar ditemukan, menggambar di canvas")
+                                val scaledImage = Bitmap.createScaledBitmap(image, barcodeSizePx, barcodeSizePx, false)
+                                canvas.drawBitmap(scaledImage, centerXPerwira - barcodeSizePx / 2, sameYPosition + barcodeOffsetY, null) // Barcode tetap center
+                            } ?: Log.d("FirestoreDebug", "Gambar tidak ditemukan")
+                            canvas.drawText(
+                                when (agenda.terminal) {
+                                    "Terminal Jamrud" -> "(Anton Yudhiana)"
+                                    "Terminal Mirah", "Terminal Nilam" -> "(Dimas Wibowo)"
+                                    else -> "(Nama Tidak Diketahui)"
+                                },
+                                centerXPerwira, sameYPosition + spacingAboveName, paint
+                            )
+
+                            canvas.drawText("KOORDINATOR BRIEFING", centerXKoordinator, sameYPosition, paint)
+
+                            val koorBarcode = when (agenda.terminal to agenda.group) {
+                                "Terminal Jamrud" to "Group A" -> R.drawable.jamrudgroupa
+                                "Terminal Jamrud" to "Group B" -> R.drawable.jamrudgroupb
+                                "Terminal Jamrud" to "Group C" -> R.drawable.jamrudgroupc
+                                "Terminal Jamrud" to "Group D" -> R.drawable.jamrudgroupd
+                                "Terminal Mirah" to "Group A" -> R.drawable.mirahgroupa
+                                "Terminal Mirah" to "Group B" -> R.drawable.mirahgroupb
+                                "Terminal Mirah" to "Group C" -> R.drawable.mirahgroupc
+                                "Terminal Mirah" to "Group D" -> R.drawable.mirahgroupd
+                                "Terminal Nilam" to "Group A" -> R.drawable.nilamgroupa
+                                "Terminal Nilam" to "Group B" -> R.drawable.nilamgroupb
+                                "Terminal Nilam" to "Group C" -> R.drawable.nilamgroupc
+                                "Terminal Nilam" to "Group D" -> R.drawable.nilamgroupd
+                                else -> null
+                            }
+
+                            koorBarcode?.let {
+                                val barcodeBitmap = BitmapFactory.decodeResource(activity.resources, it)
+                                val scaledBarcode = Bitmap.createScaledBitmap(barcodeBitmap, barcodeSizePx, barcodeSizePx, false)
+                                canvas.drawBitmap(scaledBarcode, centerXKoordinator - barcodeSizePx / 2, sameYPosition + barcodeOffsetY, null) // ✅ Barcode tetap center
+                            }
+
+                            canvas.drawText("(${agenda.koordinator ?: "-"})", centerXKoordinator, sameYPosition + spacingAboveName, paint)
+                            pdfDocument.finishPage(secondPage)
+
+                            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                            val fileName = "SafetyBriefing_${agenda.terminal}_$timeStamp.pdf"
+                            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                            val file = File(downloadsDir, fileName)
+
+                            pdfDocument.writeTo(FileOutputStream(file))
+                            pdfDocument.close()
+
+                            Toast.makeText(activity, "PDF berhasil disimpan di ${file.absolutePath}", Toast.LENGTH_LONG).show()
+
+                        }
+                    }
+                } ?: Log.d("FirestoreDebug", "imageUrl kosong")
+            }
+            .addOnFailureListener {
+                Toast.makeText(activity, "Gagal ambil gambar dari Firestore", Toast.LENGTH_SHORT).show()
+                Log.d("FirestoreDebug", "Gagal mengambil dokumen dari Firestore: ${it.message}")
+            }
+    } ?: Log.d("FirestoreDebug", "fieldName kosong")
+
 }
 
 @Composable
 fun PdfLayoutScreen(agenda: Agenda_detail?) {
     Column(
         modifier = Modifier
+            .background(Color.White)
             .fillMaxSize()
             .padding(start = 28.dp, top = 10.dp, end = 28.dp) // Atur padding atas, kanan, kiri
-            .background(Color.White)
     ) {
         // 🔹 Header dengan 3 Kolom
         Row(
@@ -1171,9 +1232,9 @@ fun UnduhPdfScreen(briefingId: String) {
     }
     Column(
         modifier = Modifier
+            .background(Color.White)
             .fillMaxSize()
             .padding(start = 28.dp, top = 10.dp, end = 28.dp)
-            .background(Color.White)
     ) {
         Row(
             modifier = Modifier
