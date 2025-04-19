@@ -60,6 +60,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import android.util.TypedValue
 import androidx.annotation.RequiresApi
+import androidx.compose.ui.graphics.asImageBitmap
 import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
@@ -183,100 +184,166 @@ fun saveBitmapAsPdf(activity: ComponentActivity, bitmap: Bitmap, agenda: Agenda_
     var imageUrl: String? = null
     val firestore = FirebaseFirestore.getInstance()
 
-    val fieldName = when (agenda.terminal) {
-        "Terminal Jamrud" -> "Jamrud"
-        "Terminal Mirah" -> "Mirah"
-        "Terminal Nilam" -> "Nilam"
-        else -> null
-    }
-
+    val fieldName = agenda.terminal?.split(" ")?.getOrNull(1)
 
     Log.d("FirestoreDebug", "Field Name: $fieldName")
 
     fieldName?.let { field ->
-        // Mengambil URL gambar (baik untuk tanda tangan maupun barcode)
-        firestore.collection("image").document("ttd_manager").get()
-            .addOnSuccessListener { doc ->
-                Log.d("FirestoreDebug", "Dokumen berhasil diambil dari Firestore")
+        // Menentukan role perwira berdasarkan terminal (contoh: "Manager Operasi Jamrud")
+        val terminalName = agenda.terminal?.substringAfterLast(" ")?.trim() ?: ""
+        val role = "Manager Operasi $terminalName"
 
-                imageUrl = doc.getString(field)
+        // Log untuk memastikan role yang telah disusun
+        Log.d("FirestoreDebug", "Role yang dicari: $role")
 
-                Log.d("FirestoreDebug", "imageUrl: $imageUrl")
+        // Mengambil nama perwira berdasarkan role dari Firestore
+        firestore.collection("users")
+            .whereEqualTo("role", role)
+            .limit(1) // Ambil hanya satu dokumen yang cocok
+            .get()
+            .addOnSuccessListener { result ->
+                // Pastikan dokumen ditemukan
+                val name = result.documents.firstOrNull()?.getString("name")
+                val perwiraName = name ?: "Nama Tidak Diketahui"
 
-                // Lanjutkan jika URL ditemukan
-                imageUrl?.let { imageLink ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        // Unduh gambar dari URL
-                        val imageBitmap = getBitmapFromUrl(activity, imageLink)
+                // Log untuk nama perwira yang ditemukan
+                Log.d("FirestoreDebug", "Nama perwira yang ditemukan: $perwiraName")
 
-                        Log.d("FirestoreDebug", "imageBitmap: $imageBitmap")
+                // Mengambil URL gambar (baik untuk tanda tangan maupun barcode)
+                firestore.collection("image").document("ttd_manager").get()
+                    .addOnSuccessListener { doc ->
+                        Log.d("FirestoreDebug", "Dokumen berhasil diambil dari Firestore")
+                        val imageUrl = doc.getString(field)
 
-                        // Pastikan gambar sudah tersedia sebelum menggambar di canvas
-                        withContext(Dispatchers.Main) {
-                            val canvas = secondPage.canvas// Pastikan bitmap untuk canvas sudah ada
+                        Log.d("FirestoreDebug", "imageUrl: $imageUrl")
 
-                            // 🟢 PERWIRA BRIEFING (LURUS DENGAN KOORDINATOR)
-                            canvas.drawText("PERWIRA BRIEFING", centerXPerwira, sameYPosition, paint)
+                        // Lanjutkan jika URL ditemukan
+                        imageUrl?.let { imageLink ->
+                            CoroutineScope(Dispatchers.IO).launch {
+                                // Unduh gambar dari URL
+                                val imageBitmap = getBitmapFromUrl(activity, imageLink)
 
-                            // Gambar barcode di canvas
-                            imageBitmap?.let { image ->
-                                Log.d("FirestoreDebug", "Gambar ditemukan, menggambar di canvas")
-                                val scaledImage = Bitmap.createScaledBitmap(image, barcodeSizePx, barcodeSizePx, false)
-                                canvas.drawBitmap(scaledImage, centerXPerwira - barcodeSizePx / 2, sameYPosition + barcodeOffsetY, null) // Barcode tetap center
-                            } ?: Log.d("FirestoreDebug", "Gambar tidak ditemukan")
-                            canvas.drawText(
-                                when (agenda.terminal) {
-                                    "Terminal Jamrud" -> "(Anton Yudhiana)"
-                                    "Terminal Mirah", "Terminal Nilam" -> "(Dimas Wibowo)"
-                                    else -> "(Nama Tidak Diketahui)"
-                                },
-                                centerXPerwira, sameYPosition + spacingAboveName, paint
-                            )
+                                Log.d("FirestoreDebug", "imageBitmap: $imageBitmap")
 
-                            canvas.drawText("KOORDINATOR BRIEFING", centerXKoordinator, sameYPosition, paint)
+                                // Pastikan gambar sudah tersedia sebelum menggambar di canvas
+                                withContext(Dispatchers.Main) {
+                                    val canvas = secondPage.canvas // Pastikan bitmap untuk canvas sudah ada
 
-                            val koorBarcode = when (agenda.terminal to agenda.group) {
-                                "Terminal Jamrud" to "Group A" -> R.drawable.jamrudgroupa
-                                "Terminal Jamrud" to "Group B" -> R.drawable.jamrudgroupb
-                                "Terminal Jamrud" to "Group C" -> R.drawable.jamrudgroupc
-                                "Terminal Jamrud" to "Group D" -> R.drawable.jamrudgroupd
-                                "Terminal Mirah" to "Group A" -> R.drawable.mirahgroupa
-                                "Terminal Mirah" to "Group B" -> R.drawable.mirahgroupb
-                                "Terminal Mirah" to "Group C" -> R.drawable.mirahgroupc
-                                "Terminal Mirah" to "Group D" -> R.drawable.mirahgroupd
-                                "Terminal Nilam" to "Group A" -> R.drawable.nilamgroupa
-                                "Terminal Nilam" to "Group B" -> R.drawable.nilamgroupb
-                                "Terminal Nilam" to "Group C" -> R.drawable.nilamgroupc
-                                "Terminal Nilam" to "Group D" -> R.drawable.nilamgroupd
-                                else -> null
+                                    // 🟢 PERWIRA BRIEFING (LURUS DENGAN KOORDINATOR)
+                                    canvas.drawText(
+                                        "PERWIRA BRIEFING",
+                                        centerXPerwira,
+                                        sameYPosition,
+                                        paint
+                                    )
+
+                                    // Gambar barcode di canvas
+                                    imageBitmap?.let { image ->
+                                        Log.d("FirestoreDebug", "Gambar ditemukan, menggambar di canvas")
+                                        val scaledImage = Bitmap.createScaledBitmap(
+                                            image,
+                                            barcodeSizePx,
+                                            barcodeSizePx,
+                                            false
+                                        )
+                                        canvas.drawBitmap(
+                                            scaledImage,
+                                            centerXPerwira - barcodeSizePx / 2,
+                                            sameYPosition + barcodeOffsetY,
+                                            null
+                                        ) // Barcode tetap center
+                                    } ?: Log.d("FirestoreDebug", "Gambar tidak ditemukan")
+
+                                    // Menambahkan nama perwira ke canvas
+                                    canvas.drawText(
+                                        "($perwiraName)",
+                                        centerXPerwira,
+                                        sameYPosition + spacingAboveName,
+                                        paint
+                                    )
+
+                                    // Koordinator briefing
+                                    canvas.drawText(
+                                        "KOORDINATOR BRIEFING",
+                                        centerXKoordinator,
+                                        sameYPosition,
+                                        paint
+                                    )
+
+                                    // Ambil barcode koordinator
+                                    val groupSuffix = agenda.group?.lastOrNull()?.toString() ?: ""
+                                    val koorField = fieldName + groupSuffix // Misal: "Jamrud" + "A" = "JamrudA"
+
+                                    firestore.collection("image").document("ttd_koor").get()
+                                        .addOnSuccessListener { barcodeDoc ->
+                                            val koorImageUrl = barcodeDoc.getString(koorField)
+
+                                            CoroutineScope(Dispatchers.IO).launch {
+                                                val koorBitmap = getBitmapFromUrl(activity, koorImageUrl.toString())
+
+                                                withContext(Dispatchers.Main) {
+                                                    koorBitmap?.let { image ->
+                                                        val scaledImage = Bitmap.createScaledBitmap(
+                                                            image,
+                                                            barcodeSizePx,
+                                                            barcodeSizePx,
+                                                            false
+                                                        )
+                                                        canvas.drawBitmap(
+                                                            scaledImage,
+                                                            centerXKoordinator - barcodeSizePx / 2,
+                                                            sameYPosition + barcodeOffsetY,
+                                                            null
+                                                        )
+                                                    }
+
+                                                    canvas.drawText(
+                                                        "(${agenda.koordinator ?: "-"})",
+                                                        centerXKoordinator,
+                                                        sameYPosition + spacingAboveName,
+                                                        paint
+                                                    )
+
+                                                    // ✅ Selesaikan halaman dan simpan PDF
+                                                    pdfDocument.finishPage(secondPage)
+
+                                                    val timeStamp = SimpleDateFormat(
+                                                        "yyyyMMdd_HHmmss",
+                                                        Locale.getDefault()
+                                                    ).format(Date())
+                                                    val fileName =
+                                                        "SafetyBriefing_${agenda.terminal}_$timeStamp.pdf"
+                                                    val downloadsDir =
+                                                        Environment.getExternalStoragePublicDirectory(
+                                                            Environment.DIRECTORY_DOWNLOADS
+                                                        )
+                                                    val file = File(downloadsDir, fileName)
+
+                                                    pdfDocument.writeTo(FileOutputStream(file))
+                                                    pdfDocument.close()
+
+                                                    Toast.makeText(
+                                                        activity,
+                                                        "PDF berhasil disimpan di ${file.absolutePath}",
+                                                        Toast.LENGTH_LONG
+                                                    ).show()
+                                                }
+                                            }
+                                        }
+                                        .addOnFailureListener {
+                                            Log.e("FirestoreDebug", "Gagal mengambil barcode koordinator: ${it.message}")
+                                        }
+                                }
                             }
-
-                            koorBarcode?.let {
-                                val barcodeBitmap = BitmapFactory.decodeResource(activity.resources, it)
-                                val scaledBarcode = Bitmap.createScaledBitmap(barcodeBitmap, barcodeSizePx, barcodeSizePx, false)
-                                canvas.drawBitmap(scaledBarcode, centerXKoordinator - barcodeSizePx / 2, sameYPosition + barcodeOffsetY, null) // ✅ Barcode tetap center
-                            }
-
-                            canvas.drawText("(${agenda.koordinator ?: "-"})", centerXKoordinator, sameYPosition + spacingAboveName, paint)
-                            pdfDocument.finishPage(secondPage)
-
-                            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                            val fileName = "SafetyBriefing_${agenda.terminal}_$timeStamp.pdf"
-                            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                            val file = File(downloadsDir, fileName)
-
-                            pdfDocument.writeTo(FileOutputStream(file))
-                            pdfDocument.close()
-
-                            Toast.makeText(activity, "PDF berhasil disimpan di ${file.absolutePath}", Toast.LENGTH_LONG).show()
-
-                        }
+                        } ?: Log.d("FirestoreDebug", "imageUrl kosong")
                     }
-                } ?: Log.d("FirestoreDebug", "imageUrl kosong")
+                    .addOnFailureListener {
+                        Toast.makeText(activity, "Gagal ambil gambar dari Firestore", Toast.LENGTH_SHORT).show()
+                        Log.d("FirestoreDebug", "Gagal mengambil dokumen dari Firestore: ${it.message}")
+                    }
             }
             .addOnFailureListener {
-                Toast.makeText(activity, "Gagal ambil gambar dari Firestore", Toast.LENGTH_SHORT).show()
-                Log.d("FirestoreDebug", "Gagal mengambil dokumen dari Firestore: ${it.message}")
+                Log.e("FirestoreDebug", "Gagal mengambil perwira: ${it.message}")
             }
     } ?: Log.d("FirestoreDebug", "fieldName kosong")
 
@@ -1126,74 +1193,108 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
 
         Spacer(modifier = Modifier.height(150.dp))
 
+        val context = LocalContext.current
+        var perwiraBitmap by remember { mutableStateOf<Bitmap?>(null) }
+        var koorBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+        LaunchedEffect(agenda?.terminal, agenda?.group) {
+            val firestore = FirebaseFirestore.getInstance()
+
+            // Perwira
+            val perwiraField = agenda?.terminal?.substringAfter("Terminal ")?.replace(" ", "") ?: ""
+            firestore.collection("image").document("ttd_manager").get()
+                .addOnSuccessListener { document ->
+                    val url = document.getString(perwiraField)
+                    url?.let {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            val bitmap = getBitmapFromUrl(context, it)
+                            withContext(Dispatchers.Main) {
+                                perwiraBitmap = bitmap
+                            }
+                        }
+                    }
+                }
+
+            // Koordinator
+            val koorField = perwiraField + (agenda?.group?.lastOrNull()?.toString() ?: "")
+            firestore.collection("image").document("ttd_koor").get()
+                .addOnSuccessListener { document ->
+                    val url = document.getString(koorField)
+                    url?.let {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            val bitmap = getBitmapFromUrl(context, it)
+                            withContext(Dispatchers.Main) {
+                                koorBitmap = bitmap
+                            }
+                        }
+                    }
+                }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 12.dp),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
+            // === PERWIRA BRIEFING ===
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("PERWIRA BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
                 Spacer(modifier = Modifier.height(5.dp))
 
-                val barcodePerwiraRes: Int? = when (agenda?.terminal) {
-                    "Terminal Jamrud" -> R.drawable.barcode_anton
-                    "Terminal Mirah" -> R.drawable.barcode_dimas
-                    "Terminal Nilam" -> R.drawable.barcode_dimas
-                    else -> null
-                }
-
-                barcodePerwiraRes?.let {
+                perwiraBitmap?.let {
                     Image(
-                        painter = painterResource(id = it),
+                        bitmap = it.asImageBitmap(),
                         contentDescription = "Barcode tanda tangan perwira",
                         modifier = Modifier.size(50.dp)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(5.dp))
+
+                val context = LocalContext.current
+                val firestore = FirebaseFirestore.getInstance()
+                var namaPerwira by remember { mutableStateOf("(Nama Tidak Diketahui)") }
+
+                LaunchedEffect(agenda?.terminal) {
+                    agenda?.terminal?.let { terminal ->
+                        // Ambil nama terminal yang terakhir (misal "Terminal Jamrud" -> "Jamrud")
+                        val terminalName = terminal.substringAfterLast(" ").trim()
+                        val role = "Manager Operasi $terminalName"
+
+                        firestore.collection("users")
+                            .whereEqualTo("role", role)
+                            .limit(1)
+                            .get()
+                            .addOnSuccessListener { querySnapshot ->
+                                val name = querySnapshot.documents.firstOrNull()?.getString("nama")
+                                if (!name.isNullOrEmpty()) {
+                                    namaPerwira = "($name)"
+                                }
+                            }
+                    }
+                }
+
                 Text(
-                    text = when (agenda?.terminal) {
-                        "Terminal Jamrud" -> "(Anton Yudhiana)"
-                        "Terminal Mirah" -> "(Dimas Wibowo)"
-                        "Terminal Nilam" -> "(Dimas Wibowo)"
-                        else -> "(Nama Tidak Diketahui)"
-                    },
+                    text = namaPerwira,
                     fontSize = 7.sp,
                     textAlign = TextAlign.Center
                 )
             }
 
+            // === KOORDINATOR BRIEFING ===
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("KOORDINATOR BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
                 Spacer(modifier = Modifier.height(5.dp))
 
-                val barcodeKoorRes: Int? = when (agenda?.terminal to agenda?.group) {
-                    "Terminal Jamrud" to "Group A" -> R.drawable.jamrudgroupa
-                    "Terminal Jamrud" to "Group B" -> R.drawable.jamrudgroupb
-                    "Terminal Jamrud" to "Group C" -> R.drawable.jamrudgroupc
-                    "Terminal Jamrud" to "Group D" -> R.drawable.jamrudgroupd
-                    "Terminal Mirah" to "Group A" -> R.drawable.mirahgroupa
-                    "Terminal Mirah" to "Group B" -> R.drawable.mirahgroupb
-                    "Terminal Mirah" to "Group C" -> R.drawable.mirahgroupc
-                    "Terminal Mirah" to "Group D" -> R.drawable.mirahgroupd
-                    "Terminal Nilam" to "Group A" -> R.drawable.nilamgroupa
-                    "Terminal Nilam" to "Group B" -> R.drawable.nilamgroupb
-                    "Terminal Nilam" to "Group C" -> R.drawable.nilamgroupc
-                    "Terminal Nilam" to "Group D" -> R.drawable.nilamgroupd
-
-                    else -> null
-                }
-
-                barcodeKoorRes?.let {
+                koorBitmap?.let {
                     Image(
-                        painter = painterResource(id = it),
+                        bitmap = it.asImageBitmap(),
                         contentDescription = "Barcode tanda tangan koordinator",
                         modifier = Modifier.size(50.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(5.dp)) // Ruang untuk tanda tangan
+                Spacer(modifier = Modifier.height(5.dp))
                 Text(
                     text = "(${agenda?.koordinator ?: "-"})",
                     fontSize = 7.sp,
@@ -2073,75 +2174,108 @@ fun UnduhPdfScreen(briefingId: String) {
 
         Spacer(modifier = Modifier.height(150.dp))
 
+        val context = LocalContext.current
+        var perwiraBitmap by remember { mutableStateOf<Bitmap?>(null) }
+        var koorBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+        LaunchedEffect(agenda?.terminal, agenda?.group) {
+            val firestore = FirebaseFirestore.getInstance()
+
+            // Perwira
+            val perwiraField = agenda?.terminal?.substringAfter("Terminal ")?.replace(" ", "") ?: ""
+            firestore.collection("image").document("ttd_manager").get()
+                .addOnSuccessListener { document ->
+                    val url = document.getString(perwiraField)
+                    url?.let {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            val bitmap = getBitmapFromUrl(context, it)
+                            withContext(Dispatchers.Main) {
+                                perwiraBitmap = bitmap
+                            }
+                        }
+                    }
+                }
+
+            // Koordinator
+            val koorField = perwiraField + (agenda?.group?.lastOrNull()?.toString() ?: "")
+            firestore.collection("image").document("ttd_koor").get()
+                .addOnSuccessListener { document ->
+                    val url = document.getString(koorField)
+                    url?.let {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            val bitmap = getBitmapFromUrl(context, it)
+                            withContext(Dispatchers.Main) {
+                                koorBitmap = bitmap
+                            }
+                        }
+                    }
+                }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 12.dp),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
-            // Kolom Perwira Briefing
+            // === PERWIRA BRIEFING ===
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("PERWIRA BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
                 Spacer(modifier = Modifier.height(5.dp))
 
-                val barcodePerwiraRes: Int? = when (agenda?.terminal) {
-                    "Terminal Jamrud" -> R.drawable.barcode_anton
-                    "Terminal Mirah" -> R.drawable.barcode_dimas
-                    "Terminal Nilam" -> R.drawable.barcode_dimas
-                    else -> null // ✅ Gunakan null untuk kondisi default
-                }
-
-                barcodePerwiraRes?.let {
+                perwiraBitmap?.let {
                     Image(
-                        painter = painterResource(id = it),
+                        bitmap = it.asImageBitmap(),
                         contentDescription = "Barcode tanda tangan perwira",
                         modifier = Modifier.size(50.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(5.dp)) // Ruang untuk tanda tangan
+                Spacer(modifier = Modifier.height(5.dp))
+
+                val context = LocalContext.current
+                val firestore = FirebaseFirestore.getInstance()
+                var namaPerwira by remember { mutableStateOf("(Nama Tidak Diketahui)") }
+
+                LaunchedEffect(agenda?.terminal) {
+                    agenda?.terminal?.let { terminal ->
+                        // Ambil nama terminal yang terakhir (misal "Terminal Jamrud" -> "Jamrud")
+                        val terminalName = terminal.substringAfterLast(" ").trim()
+                        val role = "Manager Operasi $terminalName"
+
+                        firestore.collection("users")
+                            .whereEqualTo("role", role)
+                            .limit(1)
+                            .get()
+                            .addOnSuccessListener { querySnapshot ->
+                                val name = querySnapshot.documents.firstOrNull()?.getString("nama")
+                                if (!name.isNullOrEmpty()) {
+                                    namaPerwira = "($name)"
+                                }
+                            }
+                    }
+                }
+
                 Text(
-                    text = when (agenda?.terminal) {
-                        "Terminal Jamrud" -> "(Anton Yudhiana)"
-                        "Terminal Mirah" -> "(Dimas Wibowo)"
-                        "Terminal Nilam" -> "(Dimas Wibowo)"
-                        else -> "(Nama Tidak Diketahui)"
-                    },
+                    text = namaPerwira,
                     fontSize = 7.sp,
                     textAlign = TextAlign.Center
                 )
             }
 
+            // === KOORDINATOR BRIEFING ===
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("KOORDINATOR BRIEFING", fontSize = 7.sp, fontWeight = FontWeight.Normal)
                 Spacer(modifier = Modifier.height(5.dp))
 
-                // Pengkondisian Barcode Koordinator berdasarkan Terminal & Group
-                val barcodeKoorRes: Int? = when (agenda?.terminal to agenda?.group) {
-                    "Terminal Jamrud" to "Group A" -> R.drawable.jamrudgroupa
-                    "Terminal Jamrud" to "Group B" -> R.drawable.jamrudgroupb
-                    "Terminal Jamrud" to "Group C" -> R.drawable.jamrudgroupc
-                    "Terminal Jamrud" to "Group D" -> R.drawable.jamrudgroupd
-                    "Terminal Mirah" to "Group A" -> R.drawable.mirahgroupa
-                    "Terminal Mirah" to "Group B" -> R.drawable.mirahgroupb
-                    "Terminal Mirah" to "Group C" -> R.drawable.mirahgroupc
-                    "Terminal Mirah" to "Group D" -> R.drawable.mirahgroupd
-                    "Terminal Nilam" to "Group A" -> R.drawable.nilamgroupa
-                    "Terminal Nilam" to "Group B" -> R.drawable.nilamgroupb
-                    "Terminal Nilam" to "Group C" -> R.drawable.nilamgroupc
-                    "Terminal Nilam" to "Group D" -> R.drawable.nilamgroupd
-                    else -> null
-                }
-
-                barcodeKoorRes?.let {
+                koorBitmap?.let {
                     Image(
-                        painter = painterResource(id = it),
+                        bitmap = it.asImageBitmap(),
                         contentDescription = "Barcode tanda tangan koordinator",
                         modifier = Modifier.size(50.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(5.dp)) // Ruang untuk tanda tangan
+                Spacer(modifier = Modifier.height(5.dp))
                 Text(
                     text = "(${agenda?.koordinator ?: "-"})",
                     fontSize = 7.sp,
