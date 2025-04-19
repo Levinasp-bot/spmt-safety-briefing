@@ -175,11 +175,9 @@ class HomeActivity : ComponentActivity() {
             "Herwanto"
         )
 
-        val allowedKoor = listOf(
-            "Koordinator Operasi Jamrud",
-            "Koordinator Operasi Nilam",
-            "Koordinator Operasi Mirah"
-        )
+        val allowedKoor = "Koordinator Operasi"
+
+        val isAllowedKoor = allowedKoor.any { userRole.startsWith(it) }
 
         LaunchedEffect(Unit) {
             getPendingUserCount { count ->
@@ -201,20 +199,22 @@ class HomeActivity : ComponentActivity() {
 
                         val allowedRoles = listOf(
                             "Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
-                            "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE"
+                            "Manager Operasi", "HSSE"
                         )
                         val userRoles = listOf(
                             "Anggota Pengamanan", "Operasional", "Komandan Peleton", "Koordinator Lapangan Pengamanan",
-                            "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah"
+                            "Koordinator Operasi"
                         )
+                        val isAllowedRoles = allowedRoles.any { userRole.startsWith(it) }
+                        val isUserRoles = userRoles.any { userRole.startsWith(it) }
                         var agendaQuery: Query? = null
                         when {
-                            userRole in allowedRoles || userRole in userRoles -> {
+                            isAllowedRoles || isUserRoles -> {
                                 agendaQuery = firestore.collection("agenda").whereEqualTo("status", "aktif")
                                 Log.d("Firestore", "Fetching active agendas for role: $userRole")
 
                                 when {
-                                    userRole in userRoles -> {
+                                    isUserRoles -> {
                                         agendaQuery = agendaQuery.whereEqualTo("terminal", userTerminal)
                                             .whereEqualTo("group", userGroup)
                                         Log.d("Firestore", "Security & Operatioanl Role Filter Applied -> Terminal: $userTerminal, Group: $userGroup")
@@ -272,7 +272,7 @@ class HomeActivity : ComponentActivity() {
                             }
                         },
                         actions = {
-                            if (userRole == "Manager Operasi Jamrud" || userRole == "Manager Operasi Nilam Mirah") {
+                            if (userRole.startsWith("Manager Operasi")) {
                                 Box {
                                     IconButton(onClick = { navigateToPendingApproval() }) {
                                         Icon(
@@ -336,7 +336,7 @@ class HomeActivity : ComponentActivity() {
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
 
-                                    if (userRole in allowedKoor || userName in allowedNames) {
+                                    if (isAllowedKoor || userName in allowedNames) {
                                         Image(
                                             painter = painterResource(id = R.drawable.ic_action_name),
                                             contentDescription = "Tambah Briefing",
@@ -353,11 +353,11 @@ class HomeActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        val allowedRoles = setOf(
-                            "Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
-                            "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE",
-                            "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah"
-                        )
+//                        val allowedRoles = setOf(
+//                            "Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
+//                            "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE",
+//                            "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah"
+//                        )
 
                         //if (userRole in allowedRoles && activeAgenda.isNotEmpty()) {
                             //activeAgenda.forEach { agenda ->
@@ -504,11 +504,7 @@ class HomeActivity : ComponentActivity() {
             "Herwanto"
         )
 
-        val allowedKoor = listOf(
-            "Koordinator Operasi Jamrud",
-            "Koordinator Operasi Nilam",
-            "Koordinator Operasi Mirah"
-        )
+        val allowedKoor = userRole.value.startsWith("Koordinator Operasi")
 
         LaunchedEffect(briefingId) {
             if (briefingId.isNotEmpty()) {
@@ -537,9 +533,10 @@ class HomeActivity : ComponentActivity() {
                     Log.d("Firestore", "Agenda Group -> $agendaGroup")
 
                     val validRoles = listOf(
-                        "Anggota Pengamanan", "Operasional", "Komandan Peleton",
-                        "Koordinator Operasi Jamrud", "Koordinator Operasi Mirah", "Koordinator Operasi Nilam"
+                        "Anggota Pengamanan", "Operasional", "Komandan Peleton", "Koordinator Operasi"
                     )
+
+                    val isValidRoles = validRoles.any { userRole.value.startsWith(it) }
 
                     val usersSnapshot = firestore.collection("users")
                         .whereEqualTo("terminal", terminal)
@@ -553,7 +550,7 @@ class HomeActivity : ComponentActivity() {
 
                         Log.d("Firestore", "Cek User: ID=${doc.id}, Role=$role, Group=$group, UserGroup=$userGroup")
 
-                        val isValid = role in validRoles && group == agendaGroup
+                        val isValid = isValidRoles && group == agendaGroup
 
                         if (isValid) {
                             Log.d("Firestore", "User Valid: ID=${doc.id}, Role=$role, Group=$group")
@@ -656,7 +653,7 @@ class HomeActivity : ComponentActivity() {
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f) // Agar teks memenuhi sisa ruang
                     )
-                    if (userRole.value in allowedKoor || userName in allowedNames) {
+                    if (allowedKoor || userName in allowedNames) {
                         IconButton(
                             onClick = {
                                 val intent = Intent(context, EditFormActivity::class.java).apply {
@@ -745,14 +742,22 @@ class HomeActivity : ComponentActivity() {
                     }
                 }
 
-                if (userRole !in listOf(
-                        "Branch Manager",
-                        "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
-                        "Manager Operasi Jamrud",
-                        "Manager Operasi Nilam Mirah",
-                        "HSSE"
-                    )) {
+                val allowedRoles = listOf(
+                    "Branch Manager",
+                    "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
+                    "Manager Operasi", // pakai startsWith buat ini
+                    "HSSE"
+                )
 
+                val isAllowed = allowedRoles.any { role ->
+                    if (role == "Manager Operasi") {
+                        userRole.startsWith(role)
+                    } else {
+                        userRole == role
+                    }
+                }
+
+                if (!isAllowed) {
                     var isLoading by remember { mutableStateOf(false) }
 
                     Button(
@@ -868,7 +873,7 @@ class HomeActivity : ComponentActivity() {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                if (userRole in allowedKoor || userName in allowedNames) {
+                if (allowedKoor || userName in allowedNames) {
                     Button(
                         onClick = {
                             firestore.collection("agenda").document(briefingId)

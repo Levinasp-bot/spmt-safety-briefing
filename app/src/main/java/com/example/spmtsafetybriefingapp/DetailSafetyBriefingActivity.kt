@@ -121,16 +121,27 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
                 .padding(16.dp)
                 .verticalScroll(scrollState)
         ) {
+            var perwiraBriefing by remember { mutableStateOf("Tidak diketahui") }
+
             briefingData?.let { data ->
                 val terminal = data["terminal"] as? String ?: "Tidak diketahui"
                 val tempat = data["tempat"] as? String ?: "Tidak diketahui"
-                val perwiraBriefing = when (terminal) {
-                    "Terminal Jamrud" -> "Anton Yudhiana"
-                    "Terminal Mirah", "Terminal Nilam" -> "Dimas Wibowo"
-                    else -> "Tidak diketahui"
-                }
 
-                CardSection("Informasi Briefing") {
+                FirebaseFirestore.getInstance()
+                    .collection("users")
+                    .document("Manager")
+                    .get()
+                    .addOnSuccessListener { document ->
+                        val nama = document.getString(terminal)
+                        if (!nama.isNullOrEmpty()) {
+                            perwiraBriefing = nama
+                        }
+                    }
+                    .addOnFailureListener {
+                        Log.e("Firestore", "Gagal mengambil nama perwira dari Manager", it)
+                    }
+
+            CardSection("Informasi Briefing") {
                     DetailItem("Tempat", tempat)
                     DetailItem("Shift", data["shift"] as? String ?: "Tidak diketahui")
                     DetailItem("Perwira Briefing", perwiraBriefing)

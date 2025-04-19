@@ -371,28 +371,94 @@ class RegisterActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun DropdownMenuComponent(label: String, options: List<String>, selectedValue: String, onValueChange: (String) -> Unit) {
+    fun DropdownMenuComponent(
+        label: String,
+        options: List<String>,
+        selectedValue: String,
+        onValueChange: (String) -> Unit
+    ) {
         var expanded by remember { mutableStateOf(false) }
-        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        var searchQuery by remember { mutableStateOf("") }
+
+        val filteredOptions = options.filter {
+            it.contains(searchQuery, ignoreCase = true)
+        }
+
+        val outlineColor = Color(0xFF0E73A7)
+
+        Box(modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)) {
+
+            // 📦 TextField untuk dropdown (read-only)
             OutlinedTextField(
                 value = selectedValue,
                 onValueChange = {},
-                label = { Text(label) },
-                modifier = Modifier.fillMaxWidth(),
+                label = { Text(label, color = Color.Black) },
                 readOnly = true,
                 trailingIcon = {
                     IconButton(onClick = { expanded = true }) {
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown", tint = outlineColor)
                     }
-                }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    containerColor = Color.White,
+                    focusedBorderColor = outlineColor,
+                    unfocusedBorderColor = outlineColor,
+                    cursorColor = outlineColor
+                )
             )
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                options.forEach { option ->
-                    DropdownMenuItem(text = { Text(option) }, onClick = {
-                        onValueChange(option)
-                        expanded = false
-                    })
+
+            // 📋 Dropdown
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White)
+            ) {
+                // 🔍 Search Bar
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Cari...", color = Color.Gray) },
+                    singleLine = true,
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .fillMaxWidth(),
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        focusedTextColor = Color.Black,
+                        unfocusedTextColor = Color.Black,
+                        containerColor = Color.White,
+                        focusedBorderColor = outlineColor,
+                        unfocusedBorderColor = outlineColor,
+                        cursorColor = outlineColor
+                    )
+                )
+
+                // 📝 Filtered options
+                filteredOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option, color = Color.Black) },
+                        onClick = {
+                            onValueChange(option)
+                            expanded = false
+                            searchQuery = ""
+                        }
+                    )
+                }
+
+                if (filteredOptions.isEmpty()) {
+                    DropdownMenuItem(
+                        text = { Text("Tidak ditemukan", color = Color.Gray) },
+                        onClick = {},
+                        enabled = false
+                    )
                 }
             }
         }

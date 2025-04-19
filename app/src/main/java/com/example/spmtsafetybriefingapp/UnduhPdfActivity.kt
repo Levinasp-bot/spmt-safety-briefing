@@ -60,6 +60,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import android.util.TypedValue
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.asImageBitmap
 import coil.ImageLoader
 import coil.request.ImageRequest
@@ -190,26 +191,15 @@ fun saveBitmapAsPdf(activity: ComponentActivity, bitmap: Bitmap, agenda: Agenda_
 
     fieldName?.let { field ->
         // Menentukan role perwira berdasarkan terminal (contoh: "Manager Operasi Jamrud")
-        val terminalName = agenda.terminal?.substringAfterLast(" ")?.trim() ?: ""
-        val role = "Manager Operasi $terminalName"
-
-        // Log untuk memastikan role yang telah disusun
-        Log.d("FirestoreDebug", "Role yang dicari: $role")
-
-        // Mengambil nama perwira berdasarkan role dari Firestore
+        val terminalName = agenda.terminal
         firestore.collection("users")
-            .whereEqualTo("role", role)
-            .limit(1) // Ambil hanya satu dokumen yang cocok
+            .document("Manager")
             .get()
-            .addOnSuccessListener { result ->
-                // Pastikan dokumen ditemukan
-                val name = result.documents.firstOrNull()?.getString("name")
-                val perwiraName = name ?: "Nama Tidak Diketahui"
+            .addOnSuccessListener { documentSnapshot ->
+                val perwiraName = documentSnapshot.getString(terminalName) ?: "Nama Tidak Diketahui"
 
-                // Log untuk nama perwira yang ditemukan
-                Log.d("FirestoreDebug", "Nama perwira yang ditemukan: $perwiraName")
+                Log.d("FirestoreDebug", "Perwira untuk $terminalName adalah $perwiraName")
 
-                // Mengambil URL gambar (baik untuk tanda tangan maupun barcode)
                 firestore.collection("image").document("ttd_manager").get()
                     .addOnSuccessListener { doc ->
                         Log.d("FirestoreDebug", "Dokumen berhasil diambil dari Firestore")
@@ -525,6 +515,25 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 Text("Perwira Briefing", fontSize = 8.sp, fontWeight = FontWeight.Bold)
             }
 
+            var namaPerwira by remember { mutableStateOf("Nama Tidak Diketahui") }
+
+            LaunchedEffect(agenda?.terminal) {
+                val firestore = FirebaseFirestore.getInstance()
+                val terminalName = agenda?.terminal
+
+                firestore.collection("users").document("Manager")
+                    .get()
+                    .addOnSuccessListener { document ->
+                        val name = document.getString(terminalName.toString())
+                        if (!name.isNullOrEmpty()) {
+                            namaPerwira = name
+                        }
+                    }
+                    .addOnFailureListener {
+                        Log.e("Firestore", "Gagal mengambil nama dari Manager", it)
+                    }
+            }
+
             // 🔹 Kolom 2: Nama Perwira
             Box(
                 modifier = Modifier
@@ -534,12 +543,7 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                val text = when (agenda?.terminal) {
-                    "Terminal Jamrud" -> "Anton Yudhiana"
-                    "Terminal Mirah", "Terminal Nilam" -> "Dimas Wibowo"
-                    else -> "Nama Tidak Diketahui" // Jika terminal tidak cocok
-                }
-
+                val text = namaPerwira
                 Text(": $text", fontSize = 8.sp)
             }
 
@@ -1488,6 +1492,25 @@ fun UnduhPdfScreen(briefingId: String) {
                 Text("Perwira Briefing", fontSize = 8.sp, fontWeight = FontWeight.Bold)
             }
 
+            var namaPerwira by remember { mutableStateOf("Nama Tidak Diketahui") }
+
+            LaunchedEffect(agenda?.terminal) {
+                val firestore = FirebaseFirestore.getInstance()
+                val terminalName = agenda?.terminal
+
+                firestore.collection("users").document("Manager")
+                    .get()
+                    .addOnSuccessListener { document ->
+                        val name = document.getString(terminalName.toString())
+                        if (!name.isNullOrEmpty()) {
+                            namaPerwira = name
+                        }
+                    }
+                    .addOnFailureListener {
+                        Log.e("Firestore", "Gagal mengambil nama dari Manager", it)
+                    }
+            }
+
             // 🔹 Kolom 2: Nama Perwira
             Box(
                 modifier = Modifier
@@ -1497,12 +1520,7 @@ fun UnduhPdfScreen(briefingId: String) {
                     .padding(4.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                val text = when (agenda?.terminal) {
-                    "Terminal Jamrud" -> "Anton Yudhiana"
-                    "Terminal Mirah", "Terminal Nilam" -> "Dimas Wibowo"
-                    else -> "Nama Tidak Diketahui" // Jika terminal tidak cocok
-                }
-
+                val text = namaPerwira
                 Text(": $text", fontSize = 8.sp)
             }
 
@@ -2180,24 +2198,30 @@ fun UnduhPdfScreen(briefingId: String) {
 
         LaunchedEffect(agenda?.terminal, agenda?.group) {
             val firestore = FirebaseFirestore.getInstance()
+            val terminalName = agenda?.terminal?.substringAfter("Terminal ")?.replace(" ", "")
 
-            // Perwira
-            val perwiraField = agenda?.terminal?.substringAfter("Terminal ")?.replace(" ", "") ?: ""
-            firestore.collection("image").document("ttd_manager").get()
-                .addOnSuccessListener { document ->
-                    val url = document.getString(perwiraField)
-                    url?.let {
-                        CoroutineScope(Dispatchers.IO).launch {
-                            val bitmap = getBitmapFromUrl(context, it)
-                            withContext(Dispatchers.Main) {
-                                perwiraBitmap = bitmap
+            if (!terminalName.isNullOrEmpty()) {
+                firestore.collection("image").document("ttd_manager").get()
+                    .addOnSuccessListener { document ->
+                        val url = document.getString(terminalName)
+                        url?.let {
+                            CoroutineScope(Dispatchers.IO).launch {
+                                val bitmap = getBitmapFromUrl(context, it)
+                                withContext(Dispatchers.Main) {
+                                    perwiraBitmap = bitmap
+                                }
                             }
                         }
                     }
-                }
+                    .addOnFailureListener { e ->
+                        Log.e("FirestoreDebug", "Gagal mengambil data tanda tangan", e)
+                    }
+            } else {
+                Log.e("FirestoreDebug", "Terminal tidak valid atau kosong")
+            }
 
             // Koordinator
-            val koorField = perwiraField + (agenda?.group?.lastOrNull()?.toString() ?: "")
+            val koorField = terminalName + (agenda?.group?.lastOrNull()?.toString() ?: "")
             firestore.collection("image").document("ttd_koor").get()
                 .addOnSuccessListener { document ->
                     val url = document.getString(koorField)
@@ -2232,27 +2256,26 @@ fun UnduhPdfScreen(briefingId: String) {
 
                 Spacer(modifier = Modifier.height(5.dp))
 
-                val context = LocalContext.current
-                val firestore = FirebaseFirestore.getInstance()
                 var namaPerwira by remember { mutableStateOf("(Nama Tidak Diketahui)") }
+                val firestore = FirebaseFirestore.getInstance()
 
                 LaunchedEffect(agenda?.terminal) {
-                    agenda?.terminal?.let { terminal ->
-                        // Ambil nama terminal yang terakhir (misal "Terminal Jamrud" -> "Jamrud")
-                        val terminalName = terminal.substringAfterLast(" ").trim()
-                        val role = "Manager Operasi $terminalName"
+                    val terminalName = agenda?.terminal
 
-                        firestore.collection("users")
-                            .whereEqualTo("role", role)
-                            .limit(1)
-                            .get()
-                            .addOnSuccessListener { querySnapshot ->
-                                val name = querySnapshot.documents.firstOrNull()?.getString("nama")
-                                if (!name.isNullOrEmpty()) {
-                                    namaPerwira = "($name)"
-                                }
+                    firestore.collection("users").document("Manager")
+                        .get()
+                        .addOnSuccessListener { document ->
+                            val name = document.getString(terminalName.toString())
+                            if (!name.isNullOrEmpty()) {
+                                namaPerwira = "($name)"
+                            } else {
+                                namaPerwira = "(Nama Tidak Diketahui)"
                             }
-                    }
+                        }
+                        .addOnFailureListener {
+                            Log.e("Firestore", "Gagal mengambil nama perwira", it)
+                            namaPerwira = "(Error Mengambil Nama)"
+                        }
                 }
 
                 Text(
