@@ -63,6 +63,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -83,6 +85,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -95,6 +98,7 @@ import kotlinx.coroutines.tasks.await
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
+import java.time.format.DateTimeFormatter
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -113,7 +117,7 @@ class DashboardActivity : ComponentActivity() {
     }
 }
 
-@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter", "UnrememberedMutableState")
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivity) {
@@ -123,8 +127,53 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
     var attendanceList by rememberSaveable { mutableStateOf(listOf<Pair<String, String>>()) }
     var selectedTerminal by rememberSaveable { mutableStateOf("Semua Terminal") }
     var selectedShift by rememberSaveable { mutableStateOf("Semua Shift") }
-    val terminalOptions =
-        listOf("Semua Terminal", "Terminal Jamrud", "Terminal Nilam", "Terminal Mirah")
+    val terminalOptions = mutableStateListOf("Semua Terminal")
+
+    val currentUser = FirebaseAuth.getInstance().currentUser
+    val uid = currentUser?.uid
+
+
+    uid?.let { userId ->
+        FirebaseFirestore.getInstance().collection("users")
+            .document(userId)
+            .get()
+            .addOnSuccessListener { document ->
+                if (document.exists()) {
+                    val branchName = document.getString("branch") ?: return@addOnSuccessListener
+                    Log.d("TerminalFetch", "✅ Branch user: $branchName")
+
+                    FirebaseFirestore.getInstance().collection("terminal")
+                        .document(branchName)
+                        .get()
+                        .addOnSuccessListener { terminalDoc ->
+                            if (terminalDoc.exists()) {
+                                Log.d("TerminalFetch", "✅ Dokumen terminal ditemukan: ${terminalDoc.data}")
+
+                                // Ambil langsung list terminal dari field 'terminal'
+                                val terminalList = terminalDoc.get("terminal") as? List<*>
+                                terminalList?.forEach { terminalName ->
+                                    terminalName?.toString()?.let { terminalOptions.add(it) }
+                                }
+
+                                // Menambahkan "Semua Terminal" di awal daftar terminal
+                                Log.d("TerminalFetch", "✅ Terminal options final: $terminalOptions")
+                            } else {
+                                Log.e("TerminalFetch", "❌ Dokumen terminal '$branchName' tidak ditemukan")
+                            }
+                        }
+                        .addOnFailureListener {
+                            Log.e("TerminalFetch", "❌ Gagal ambil dokumen terminal: ${it.message}")
+                        }
+
+                } else {
+                    Log.e("TerminalFetch", "❌ Dokumen user tidak ditemukan")
+                }
+            }
+            .addOnFailureListener {
+                Log.e("TerminalFetch", "❌ Gagal ambil data user: ${it.message}")
+            }
+    } ?: Log.e("TerminalFetch", "❌ User belum login")
+
     var selectedDate by rememberSaveable {
         mutableStateOf(
             SimpleDateFormat(
@@ -144,6 +193,7 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
     var briefingId by rememberSaveable { mutableStateOf<String?>(null) }
     val scaffoldState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
+    val attendanceCache = remember { mutableStateMapOf<String, CachedResult>() }
 
     LaunchedEffect(selectedShift.hashCode()) {
         Log.d(
@@ -205,6 +255,19 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
     }
 
     LaunchedEffect(key1 = selectedTerminal, key2 = selectedDate, key3 = selectedShift) {
+        val cacheKey = "$selectedTerminal|$selectedDate|$selectedShift"
+        val cached = attendanceCache[cacheKey]
+
+        if (cached != null) {
+            Log.d("Firestore", "✅ Using cached data for $cacheKey")
+            attendanceList = cached.attendanceList
+            presentUsers = cached.presentUsers
+            totalUsers = cached.totalUsers
+            absentUsers = cached.absentUsers
+            filteredUsers = cached.filteredUsers
+            return@LaunchedEffect
+        }
+
         Log.d("Firestore", "🚀 LaunchedEffect Triggered! Shift: $selectedShift")
         try {
             Log.d(
@@ -314,7 +377,7 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
 
             val userDocs = try {
                 firestore.collection("users")
-                    .limit(300) // Tambahkan limit lebih besar dari jumlah user yang ada
+                    .limit(1000) // Tambahkan limit lebih besar dari jumlah user yang ada
                     .get()
                     .await()
                     .documents
@@ -335,17 +398,16 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
 
                 val validGroups = groupsByTerminal[userTerminal] ?: emptyList()
 
-                userTerminal in validTerminals &&
-                        userGroup in validGroups &&
-                        role in listOf(
+                val isKoordinator = role.startsWith("Koordinator")
+                val isAllowedRole = role in listOf(
                     "Anggota Pengamanan",
                     "Operasional",
-                    "Komandan Peleton",
-                    "Koordinator Lapangan Pengamanan",
-                    "Koordinator Operasi Jamrud",
-                    "Koordinator Operasi Nilam",
-                    "Koordinator Operasi Mirah"
-                )
+                    "Komandan Peleton"
+                ) || isKoordinator
+
+                userTerminal in validTerminals &&
+                        userGroup in validGroups &&
+                        isAllowedRole
             }
 
             filteredUsers = allUsers.filter { doc ->
@@ -375,6 +437,15 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
                 "Firestore",
                 "Total Users: $totalUsers, Present Users: $presentUsers, Absent Users: $absentUsers"
             )
+
+            attendanceCache[cacheKey] = CachedResult(
+                attendanceList = allAttendances,
+                presentUsers = presentUsers,
+                totalUsers = totalUsers,
+                absentUsers = absentUsers,
+                filteredUsers = filteredUsers
+            )
+
         } catch (e: Exception) {
             Log.e("Firestore", "Error fetching attendance: ${e.message}")
             e.printStackTrace()
@@ -458,7 +529,7 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    Box(modifier = Modifier.weight(0.3f)) {
+                    Box(modifier = Modifier.weight(0.4f)) {
                         OutlinedButton(
                             onClick = { expandedShift = true },
                             modifier = Modifier
@@ -519,6 +590,12 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
                             imageVector = Icons.Default.CalendarToday,
                             contentDescription = "Select Date",
                             tint = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = selectedDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                            color = Color.Gray,
+                            fontSize = 12.sp
                         )
                     }
                 }
@@ -764,6 +841,15 @@ fun AttendanceDashboard(firestore: FirebaseFirestore, activity: ComponentActivit
         }
     }
 }
+
+data class CachedResult(
+    val attendanceList: List<Pair<String, String>>,
+    val presentUsers: Int,
+    val totalUsers: Int,
+    val absentUsers: Int,
+    val filteredUsers: List<String>
+)
+
 
 @Composable
 fun BottomNavigationBarDashboard() {

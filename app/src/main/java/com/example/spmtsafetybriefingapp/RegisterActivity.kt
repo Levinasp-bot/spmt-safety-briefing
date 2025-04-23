@@ -54,7 +54,7 @@ class RegisterActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
     private lateinit var firestore: FirebaseFirestore
     private var interpreter: Interpreter? = null
-
+    private var isLoading: Boolean = false
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         auth = FirebaseAuth.getInstance()
@@ -149,7 +149,7 @@ class RegisterActivity : ComponentActivity() {
                 role in listOf("Anggota Pengamanan", "Operasional", "Komandan Peleton")
         var imageUri by remember { mutableStateOf<Uri?>(null) }
         var faceEmbedding by remember { mutableStateOf<List<Float>?>(null) }
-        var isLoading by remember { mutableStateOf(false) }
+
         val primaryColor = Color(0xFF0E73A7)
 
         val context = LocalContext.current
@@ -318,9 +318,8 @@ class RegisterActivity : ComponentActivity() {
 
             Button(
                 onClick = {
-                    val isUserException = nippUser in usersExceptionList // Cek apakah NIPP ada di daftar pengecualian
+                    val isUserException = nippUser in usersExceptionList
 
-                    // Validasi input kosong
                     if (noEmployee.isBlank() ||
                         email.isBlank() ||
                         password.isBlank() ||
@@ -332,17 +331,19 @@ class RegisterActivity : ComponentActivity() {
                         (showGroupDropdown && group.isBlank())
                     ) {
                         Toast.makeText(context, "Semua field harus diisi", Toast.LENGTH_SHORT).show()
+                        isLoading = false
                         return@Button
                     }
 
-                    // Validasi password harus sama
                     if (password != confirmPassword) {
                         Toast.makeText(context, "Password dan konfirmasi password tidak cocok", Toast.LENGTH_SHORT).show()
+                        isLoading = false
                         return@Button
                     }
-                    
+
                     if (imageUri == null && !isUserException) {
                         Toast.makeText(context, "Foto wajah belum diambil", Toast.LENGTH_SHORT).show()
+                        isLoading = false
                         return@Button
                     }
 
@@ -570,6 +571,9 @@ class RegisterActivity : ComponentActivity() {
         imageUri: Uri?,
         faceEmbedding: List<Float>?
     ) {
+        // Pastikan isLoading dimatikan sebelum proses dimulai
+        isLoading = true
+
         auth.createUserWithEmailAndPassword(email, password)
             .addOnSuccessListener { authResult ->
                 val userId = authResult.user?.uid ?: return@addOnSuccessListener
@@ -578,6 +582,9 @@ class RegisterActivity : ComponentActivity() {
                         if (!task.isSuccessful) {
                             Log.e("FCM", "Fetching FCM token failed", task.exception)
                             Toast.makeText(this, "Gagal mendapatkan FCM Token", Toast.LENGTH_SHORT).show()
+
+                            // Reset isLoading saat error
+                            isLoading = false
                             return@addOnCompleteListener
                         }
                         val fcmToken = task.result
@@ -593,7 +600,6 @@ class RegisterActivity : ComponentActivity() {
                             "role" to role,
                             "group" to group,
                             "noEmployee" to noEmployee,
-
                             "terminal" to terminal,
                             "faceEmbedding" to faceEmbedding,
                             "isApproved" to isManagerOperasi,
@@ -613,6 +619,9 @@ class RegisterActivity : ComponentActivity() {
                                 Toast.makeText(this, toastMessage, Toast.LENGTH_SHORT).show()
                                 startActivity(Intent(this, LoginActivity::class.java))
                                 finish()
+
+                                // Reset isLoading setelah registrasi berhasil
+                                isLoading = false
                             }
                             .addOnFailureListener { e ->
                                 Toast.makeText(
@@ -620,11 +629,17 @@ class RegisterActivity : ComponentActivity() {
                                     "Gagal menyimpan data: ${e.message}",
                                     Toast.LENGTH_SHORT
                                 ).show()
+
+                                // Reset isLoading jika gagal menyimpan data
+                                isLoading = false
                             }
                     }
             }
             .addOnFailureListener { e ->
                 Toast.makeText(this, "Registrasi gagal: ${e.message}", Toast.LENGTH_SHORT).show()
+
+                // Reset isLoading jika registrasi gagal
+                isLoading = false
             }
     }
 

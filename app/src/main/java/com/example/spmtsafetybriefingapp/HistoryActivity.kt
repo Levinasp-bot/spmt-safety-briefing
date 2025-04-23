@@ -55,36 +55,69 @@ fun HistoryScreen(navController: NavController) {
     val scaffoldState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
 
-    firestore.collection("agenda")
-        .whereEqualTo("status", "selesai")
-        .orderBy("timestamp", Query.Direction.DESCENDING)
-        .addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                Log.e("Firestore", "Error fetching data", error)
-                return@addSnapshotListener
+    val userUID = FirebaseAuth.getInstance().currentUser?.uid
+
+    firestore.collection("users")
+        .document(userUID.toString())
+        .get()
+        .addOnSuccessListener { userDoc ->
+            val userBranch = userDoc.getString("branch")
+            if (userBranch.isNullOrEmpty()) {
+                Log.e("Firestore", "Branch user tidak ditemukan")
+                return@addOnSuccessListener
             }
 
-            // Bersihkan daftar sebelum menambahkan data baru
-            agendaList.clear()
+            Log.d("Firestore", "Branch user: $userBranch")
 
-            Log.d("Firestore", "Total agenda ditemukan: ${snapshot?.documents?.size}")
+            firestore.collection("terminal")
+                .document(userBranch)
+                .get()
+                .addOnSuccessListener { terminalDoc ->
+                    val terminals = terminalDoc.get("terminal") as? List<String> ?: emptyList()
+                    Log.d("Firestore", "Terminal dari branch [$userBranch]: $terminals")
 
-            snapshot?.documents?.forEach { doc ->
-                val briefingId = doc.id
-                val terminal = doc.getString("terminal") ?: "Tidak diketahui"
-                val shift = doc.getString("shift") ?: "Tidak diketahui"
+                    firestore.collection("agenda")
+                        .whereEqualTo("status", "selesai")
+                        .orderBy("timestamp", Query.Direction.DESCENDING)
+                        .addSnapshotListener { snapshot, error ->
+                            if (error != null) {
+                                Log.e("Firestore", "Error fetching agenda", error)
+                                return@addSnapshotListener
+                            }
 
-                val timestamp: Timestamp? = if (doc.contains("timestamp") && doc.get("timestamp") is Timestamp) {
-                    doc.getTimestamp("timestamp")
-                } else {
-                    null
+                            agendaList.clear()
+
+                            val filteredDocs = snapshot?.documents?.filter { doc ->
+                                val terminal = doc.getString("terminal") ?: ""
+                                terminal in terminals
+                            } ?: emptyList()
+
+                            Log.d("Firestore", "Total agenda ditemukan: ${filteredDocs.size}")
+
+                            filteredDocs.forEach { doc ->
+                                val briefingId = doc.id
+                                val terminal = doc.getString("terminal") ?: "Tidak diketahui"
+                                val shift = doc.getString("shift") ?: "Tidak diketahui"
+                                val timestamp = doc.getTimestamp("timestamp")
+
+                                Log.d("Firestore", "Agenda -> ID: $briefingId, Terminal: $terminal, Shift: $shift, Timestamp: $timestamp")
+
+                                val agenda = Agenda(briefingId, terminal, shift, timestamp)
+                                agendaList.add(agenda)
+                            }
+                        }
+                }
+                .addOnFailureListener { error ->
+                    Log.e("Firestore", "Gagal mengambil data terminal dari collection 'terminal'", error)
                 }
 
-                Log.d("Firestore", "Agenda ditemukan -> ID: $briefingId, Terminal: $terminal, Shift: $shift, Timestamp: $timestamp")
+        }
+        .addOnFailureListener { error ->
+            Log.e("Firestore", "Gagal mengambil data user", error)
+        }
 
-                val agenda = Agenda(briefingId, terminal, shift, timestamp)
-                agendaList.add(agenda)
-            }
+        .addOnFailureListener { error ->
+            Log.e("Firestore", "Gagal mengambil data user", error)
         }
 
     ModalNavigationDrawer(
@@ -322,5 +355,4 @@ data class Agenda(
         } ?: "Tidak diketahui"
     }
 }
-
 

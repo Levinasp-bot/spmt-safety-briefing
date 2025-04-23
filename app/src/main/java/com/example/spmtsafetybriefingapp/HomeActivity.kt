@@ -159,6 +159,9 @@ class HomeActivity : ComponentActivity() {
         val coroutineScope = rememberCoroutineScope()
         var userRole by remember { mutableStateOf("") }
         var isRefreshing by remember { mutableStateOf(false) } // 🔹 State untuk Refresh
+        var userGroup by remember { mutableStateOf("") }
+        var userTerminal by remember { mutableStateOf("") }
+        var userBranch by remember { mutableStateOf("") }
 
         val allowedNames = listOf(
             "Eko Mardiyanto",
@@ -194,8 +197,9 @@ class HomeActivity : ComponentActivity() {
                         val userDoc = firestore.collection("users").document(user.uid).get().await()
                         userRole = userDoc.getString("role") ?: ""
                         userName = userDoc.getString("name") ?: "User"
-                        val userTerminal = userDoc.getString("terminal") ?: ""
-                        val userGroup = userDoc.getString("group") ?: ""
+                        userBranch = userDoc.getString("branch") ?: ""
+                        userTerminal = userDoc.getString("terminal") ?: ""
+                        userGroup = userDoc.getString("group") ?: ""
 
                         val allowedRoles = listOf(
                             "Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
@@ -249,7 +253,20 @@ class HomeActivity : ComponentActivity() {
         ModalNavigationDrawer(
             drawerState = scaffoldState,
             drawerContent = {
-                DrawerContent(onCloseDrawer = { coroutineScope.launch { scaffoldState.close() } })
+                // Batasi lebar dan hilangkan padding ekstra
+                Box(
+                    modifier = Modifier
+                        .width(280.dp) // atur sesuai kebutuhan
+                        .fillMaxHeight()
+                ) {
+                    DrawerContent(
+                        onCloseDrawer = { coroutineScope.launch { scaffoldState.close() } },
+                        userName = userName,
+                        branch = userBranch,
+                        terminal = userTerminal,
+                        group = userGroup
+                    )
+                }
             }
         ) {
             Scaffold(
@@ -489,6 +506,7 @@ class HomeActivity : ComponentActivity() {
         var participantsCount by remember { mutableStateOf(0) }
         var userRole = remember { mutableStateOf("") }
 
+
         val allowedNames = listOf(
             "Eko Mardiyanto",
             "Nanang Iswahyudi",
@@ -550,7 +568,7 @@ class HomeActivity : ComponentActivity() {
 
                         Log.d("Firestore", "Cek User: ID=${doc.id}, Role=$role, Group=$group, UserGroup=$userGroup")
 
-                        val isValid = isValidRoles && group == agendaGroup
+                        val isValid = validRoles.any { role.startsWith(it) } && group == agendaGroup
 
                         if (isValid) {
                             Log.d("Firestore", "User Valid: ID=${doc.id}, Role=$role, Group=$group")
@@ -1182,11 +1200,10 @@ class HomeActivity : ComponentActivity() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
                 .background(Color.White),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
+            Column(modifier = Modifier.padding(16.dp)) {
                 // Header / User Info
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -1212,14 +1229,12 @@ class HomeActivity : ComponentActivity() {
                 }
 
                 Divider(color = Color.LightGray, thickness = 1.dp)
-
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Tambahkan menu lain di sini jika perlu
+                // Tambahkan menu tambahan di sini
             }
 
-            // Logout Button
-            Column {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Divider(color = Color.LightGray, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(

@@ -1,12 +1,7 @@
 package com.example.spmtsafetybriefingapp
 
-import android.app.Activity
-import android.app.Dialog
 import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
@@ -15,9 +10,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.LayoutInflater
 import android.view.PixelCopy
-import android.view.View
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.ComponentDialog
@@ -62,6 +55,7 @@ import android.util.TypedValue
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.style.TextOverflow
 import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
@@ -79,7 +73,7 @@ class UnduhPdfActivity : ComponentActivity() {
         val briefingId = intent.getStringExtra("briefingId").orEmpty() // ✅ Lebih aman jika null
 
         setContent {
-            UnduhPdfScreen(briefingId) // ✅ Kirim briefingId ke composable
+            UnduhPdfScreen(briefingId)
         }
     }
 }
@@ -997,11 +991,101 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                 .addOnSuccessListener { document ->
                     if (document != null && document.exists()) {
                         Log.d("FirestoreDebug", "Data agenda ditemukan: ${document.data}")
+                        briefingData = document.data
+                        jumlahIzin = (document["izin"] as? List<*>)?.size ?: 0
+                        jumlahSakit = (document["sakit"] as? List<*>)?.size ?: 0
+                        jumlahCuti = (document["cuti"] as? List<*>)?.size ?: 0
+
+                        val selectedTerminal = document.getString("terminal") ?: ""
+                        val selectedGroup = document.getString("group") ?: ""
+
+                        Firebase.firestore.collection("users")
+                            .whereEqualTo("terminal", selectedTerminal)
+                            .whereEqualTo("group", selectedGroup)
+                            .get()
+                            .addOnSuccessListener { userSnapshot ->
+                                val semuaNamaPekerja =
+                                    userSnapshot.documents.mapNotNull { it.getString("name") }
+                                Log.d(
+                                    "FirestoreDebug",
+                                    "Total pekerja terdaftar: ${semuaNamaPekerja.size}"
+                                )
+                                semuaNamaPekerja.forEach {
+                                    Log.d("FirestoreDebug", "Nama Pekerja Terdaftar: $it")
+                                }
+
+                                Firebase.firestore.collection("agenda")
+                                    .document(briefingId)
+                                    .collection("attendance")
+                                    .get()
+                                    .addOnSuccessListener { attendanceSnapshot ->
+                                        val namaHadir =
+                                            attendanceSnapshot.documents.mapNotNull { it.getString("userName") }
+                                        jumlahPekerja = namaHadir.size
+                                        Log.d(
+                                            "FirestoreDebug",
+                                            "Jumlah pekerja hadir: $jumlahPekerja"
+                                        )
+                                        namaHadir.forEach {
+                                            Log.d("FirestoreDebug", "Nama Hadir: $it")
+                                        }
+
+                                        val namaDenganKeterangan =
+                                            (namaHadir + namaSakit + namaCuti + namaIzin + namaTidakLengkapAtribut).map {
+                                                it.trim().lowercase()
+                                            }
+                                        Log.d(
+                                            "FirestoreDebug",
+                                            "Nama dengan keterangan: $namaDenganKeterangan"
+                                        )
+
+                                        val hasilNamaTanpaKeterangan =
+                                            semuaNamaPekerja.filter { nama ->
+                                                val cleanNama = nama.trim().lowercase()
+                                                cleanNama !in namaHadir.map {
+                                                    it.trim().lowercase()
+                                                } &&
+                                                        cleanNama !in namaDenganKeterangan
+                                            }
+
+                                        namaTanpaKeterangan = hasilNamaTanpaKeterangan
+                                        Log.d(
+                                            "FirestoreDebug",
+                                            "Nama tanpa keterangan (${namaTanpaKeterangan.size}): $namaTanpaKeterangan"
+                                        )
+                                    }
+                                    .addOnFailureListener { error ->
+                                        Log.e(
+                                            "FirestoreDebug",
+                                            "Gagal mengambil data attendance",
+                                            error
+                                        )
+                                    }
+                            }
+                            .addOnFailureListener { error ->
+                                Log.e("FirestoreDebug", "Gagal mengambil data users", error)
+                            }
+                    }
+                }
+        }
+
+        LaunchedEffect(agenda) {
+            val briefingId = agenda?.briefingId
+            if (briefingId == null) {
+                Log.e("FirestoreDebug", "briefingId is null")
+                return@LaunchedEffect
+            }
+
+            Firebase.firestore.collection("agenda")
+                .document(briefingId)
+                .get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        Log.d("FirestoreDebug", "Data agenda ditemukan: ${document.data}")
 
                         namaSakit = (document["sakit"] as? List<String>) ?: emptyList()
                         namaCuti = (document["cuti"] as? List<String>) ?: emptyList()
                         namaIzin = (document["izin"] as? List<String>) ?: emptyList()
-                        namaTanpaKeterangan = (document["tanpaKeterangan"] as? List<String>) ?: emptyList()
                         namaTidakLengkapAtribut = (document["izin"] as? List<String>) ?: emptyList()
                     } else {
                         Log.e("FirestoreDebug", "Dokumen agenda tidak ditemukan")
@@ -1150,11 +1234,15 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
                     .fillMaxHeight()
                     .padding(4.dp)
             ) {
-                Column {
-                    namaTanpaKeterangan.forEach { nama ->
-                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
-                    }
+                val namaTanpaKeteranganFormatted = namaTanpaKeterangan.joinToString(", ") { nama ->
+                    nama.split(" ").take(2).joinToString(" ")
                 }
+
+                Text(
+                    text = namaTanpaKeteranganFormatted,
+                    fontSize = 7.sp,
+                    textAlign = TextAlign.Left
+                )
             }
         }
 
@@ -1204,7 +1292,6 @@ fun PdfLayoutScreen(agenda: Agenda_detail?) {
         LaunchedEffect(agenda?.terminal, agenda?.group) {
             val firestore = FirebaseFirestore.getInstance()
 
-            // Perwira
             val perwiraField = agenda?.terminal?.substringAfter("Terminal ")?.replace(" ", "") ?: ""
             firestore.collection("image").document("ttd_manager").get()
                 .addOnSuccessListener { document ->
@@ -1983,12 +2070,102 @@ fun UnduhPdfScreen(briefingId: String) {
                 .addOnSuccessListener { document ->
                     if (document != null && document.exists()) {
                         Log.d("FirestoreDebug", "Data agenda ditemukan: ${document.data}")
+                        briefingData = document.data
+                        jumlahIzin = (document["izin"] as? List<*>)?.size ?: 0
+                        jumlahSakit = (document["sakit"] as? List<*>)?.size ?: 0
+                        jumlahCuti = (document["cuti"] as? List<*>)?.size ?: 0
+
+                        val selectedTerminal = document.getString("terminal") ?: ""
+                        val selectedGroup = document.getString("group") ?: ""
+
+                        Firebase.firestore.collection("users")
+                            .whereEqualTo("terminal", selectedTerminal)
+                            .whereEqualTo("group", selectedGroup)
+                            .get()
+                            .addOnSuccessListener { userSnapshot ->
+                                val semuaNamaPekerja =
+                                    userSnapshot.documents.mapNotNull { it.getString("name") }
+                                Log.d(
+                                    "FirestoreDebug",
+                                    "Total pekerja terdaftar: ${semuaNamaPekerja.size}"
+                                )
+                                semuaNamaPekerja.forEach {
+                                    Log.d("FirestoreDebug", "Nama Pekerja Terdaftar: $it")
+                                }
+
+                                Firebase.firestore.collection("agenda")
+                                    .document(briefingId)
+                                    .collection("attendance")
+                                    .get()
+                                    .addOnSuccessListener { attendanceSnapshot ->
+                                        val namaHadir =
+                                            attendanceSnapshot.documents.mapNotNull { it.getString("userName") }
+                                        jumlahPekerja = namaHadir.size
+                                        Log.d(
+                                            "FirestoreDebug",
+                                            "Jumlah pekerja hadir: $jumlahPekerja"
+                                        )
+                                        namaHadir.forEach {
+                                            Log.d("FirestoreDebug", "Nama Hadir: $it")
+                                        }
+
+                                        val namaDenganKeterangan =
+                                            (namaHadir + namaSakit + namaCuti + namaIzin + namaTidakLengkapAtribut).map {
+                                                it.trim().lowercase()
+                                            }
+                                        Log.d(
+                                            "FirestoreDebug",
+                                            "Nama dengan keterangan: $namaDenganKeterangan"
+                                        )
+
+                                        val hasilNamaTanpaKeterangan =
+                                            semuaNamaPekerja.filter { nama ->
+                                                val cleanNama = nama.trim().lowercase()
+                                                cleanNama !in namaHadir.map {
+                                                    it.trim().lowercase()
+                                                } &&
+                                                        cleanNama !in namaDenganKeterangan
+                                            }
+
+                                        namaTanpaKeterangan = hasilNamaTanpaKeterangan
+                                        Log.d(
+                                            "FirestoreDebug",
+                                            "Nama tanpa keterangan (${namaTanpaKeterangan.size}): $namaTanpaKeterangan"
+                                        )
+                                    }
+                                    .addOnFailureListener { error ->
+                                        Log.e(
+                                            "FirestoreDebug",
+                                            "Gagal mengambil data attendance",
+                                            error
+                                        )
+                                    }
+                            }
+                            .addOnFailureListener { error ->
+                                Log.e("FirestoreDebug", "Gagal mengambil data users", error)
+                            }
+                    }
+                }
+        }
+
+        LaunchedEffect(agenda) {
+            val briefingId = agenda?.briefingId
+            if (briefingId == null) {
+                Log.e("FirestoreDebug", "briefingId is null")
+                return@LaunchedEffect
+            }
+
+            Firebase.firestore.collection("agenda")
+                .document(briefingId)
+                .get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        Log.d("FirestoreDebug", "Data agenda ditemukan: ${document.data}")
 
                         // 🔹 Ambil nama pekerja berdasarkan kategori
                         namaSakit = (document["sakit"] as? List<String>) ?: emptyList()
                         namaCuti = (document["cuti"] as? List<String>) ?: emptyList()
                         namaIzin = (document["izin"] as? List<String>) ?: emptyList()
-                        namaTanpaKeterangan = (document["tanpaKeterangan"] as? List<String>) ?: emptyList()
                         namaTidakLengkapAtribut = (document["tlatribut"] as? List<String>) ?: emptyList()
                     } else {
                         Log.e("FirestoreDebug", "Dokumen agenda tidak ditemukan")
@@ -2143,22 +2320,25 @@ fun UnduhPdfScreen(briefingId: String) {
                     .fillMaxHeight()
                     .padding(4.dp)
             ) {
-                Column {
-                    namaTanpaKeterangan.forEach { nama ->
-                        Text(nama, fontSize = 7.sp, textAlign = TextAlign.Left)
-                    }
+                val namaTanpaKeteranganFormatted = namaTanpaKeterangan.joinToString(", ") { nama ->
+                    nama.split(" ").take(2).joinToString(" ")
                 }
+
+                Text(
+                    text = namaTanpaKeteranganFormatted,
+                    fontSize = 7.sp,
+                    textAlign = TextAlign.Left
+                )
             }
         }
 
-        Row(
+            Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min)
                 .border(1.dp, Color.Black)
                 .padding(4.dp)
         ) {
-            // 🔹 Kolom 1: Nama Pekerja Sakit
             Box(
                 modifier = Modifier
                     .weight(2f)
@@ -2174,7 +2354,6 @@ fun UnduhPdfScreen(briefingId: String) {
                 )
             }
 
-            // 🔹 Kolom 2: Kosong
             Box(
                 modifier = Modifier
                     .weight(4f)
@@ -2220,7 +2399,6 @@ fun UnduhPdfScreen(briefingId: String) {
                 Log.e("FirestoreDebug", "Terminal tidak valid atau kosong")
             }
 
-            // Koordinator
             val koorField = terminalName + (agenda?.group?.lastOrNull()?.toString() ?: "")
             firestore.collection("image").document("ttd_koor").get()
                 .addOnSuccessListener { document ->
