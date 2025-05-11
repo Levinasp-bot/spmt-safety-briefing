@@ -1,5 +1,4 @@
 package com.example.spmtsafetybriefingapp
-
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -48,7 +47,6 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.text.input.VisualTransformation
 import kotlinx.coroutines.tasks.await
-
 
 class RegisterActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth

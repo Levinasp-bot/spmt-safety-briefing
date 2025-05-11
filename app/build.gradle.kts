@@ -110,4 +110,6 @@ dependencies {
     implementation("com.google.auth:google-auth-library-oauth2-http:1.21.0")
     implementation("androidx.compose.material:material-icons-extended:1.5.0")
     implementation("com.itextpdf:itext7-core:7.1.15")
+    implementation("com.patrykandpatrick.vico:compose:1.13.0")
+    implementation("com.patrykandpatrick.vico:core:1.13.0")
 }

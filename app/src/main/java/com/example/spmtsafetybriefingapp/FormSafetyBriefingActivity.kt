@@ -3,6 +3,7 @@ package com.example.spmtsafetybriefingapp
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
@@ -11,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -54,11 +57,16 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Date
 
 class FormSafetyBriefingActivity : ComponentActivity() {
     private val firestore = FirebaseFirestore.getInstance()
     private val cloudinaryUrl = "https://api.cloudinary.com/v1_1/deki7dwe5/image/upload"
 
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -87,6 +95,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     @Composable
     fun FormSafetyBriefingScreen(onSaveData: (Map<String, Any>, Bitmap?) -> Unit) {
         var imageBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -105,6 +114,7 @@ class FormSafetyBriefingActivity : ComponentActivity() {
         var shift by remember { mutableStateOf("") }
         var group by remember { mutableStateOf("") }
         var isLoading by remember { mutableStateOf(false) }
+        var serahTerimaSebelumnya by remember { mutableStateOf<List<String>>(emptyList()) }
 
         val context = LocalContext.current
         val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -183,7 +193,56 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             )
 
             DropdownMenuInput("Tempat Briefing", tempat, { tempat = it }, listOf("Terminal Jamrud", "Terminal Nilam", "Terminal Mirah"))
-            DropdownMenuInput("Shift", shift, { shift = it }, listOf("Shift 1 08:00 - 16:00", "Shift 2 16:00 - 00:00", "Shift 3 00:00 - 08:00"))
+            DropdownMenuInput("Shift", shift, { selectedShift ->
+                shift = selectedShift
+
+                try {
+                    val (prevShift, prevDate) = getPreviousShiftAndDate(selectedShift, LocalDate.now())
+                    val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                    val prevDateStr = prevDate.format(dateFormat)
+
+                    Log.d("ShiftDebug", "Selected shift: $selectedShift")
+                    Log.d("ShiftDebug", "Previous shift: $prevShift, Previous date: $prevDateStr, Terminal: $terminal")
+
+                    // Hitung start dan end of day untuk query Timestamp
+                    val zoneId = ZoneId.systemDefault()
+                    val startOfDay = prevDate.atStartOfDay(zoneId).toInstant()
+                    val endOfDay = prevDate.plusDays(1).atStartOfDay(zoneId).toInstant()
+
+                    val startTimestamp = Timestamp(Date.from(startOfDay))
+                    val endTimestamp = Timestamp(Date.from(endOfDay))
+
+                    // Query Firestore dengan rentang timestamp
+                    FirebaseFirestore.getInstance()
+                        .collection("agenda")
+                        .whereEqualTo("shift", prevShift)
+                        .whereEqualTo("terminal", terminal)
+                        .whereGreaterThanOrEqualTo("timestamp", startTimestamp)
+                        .whereLessThan("timestamp", endTimestamp)
+                        .get()
+                        .addOnSuccessListener { result ->
+                            Log.d("FirestoreResult", "Documents found: ${result.size()}")
+                            if (!result.isEmpty) {
+                                for (doc in result.documents) {
+                                    Log.d("FirestoreResult", "Document ID: ${doc.id}, Data: ${doc.data}")
+                                }
+                                val serahTerima = result.documents.firstOrNull()?.get("serahTerima") as? List<String>
+                                serahTerimaSebelumnya = serahTerima ?: emptyList()
+                                Log.d("FirestoreResult", "Agenda berhasil diambil: $serahTerimaSebelumnya")
+                            } else {
+                                Log.d("FirestoreResult", "Tidak ditemukan dokumen agenda untuk kombinasi tersebut.")
+                                serahTerimaSebelumnya = emptyList()
+                            }
+                        }
+                        .addOnFailureListener { exception ->
+                            Log.e("FirestoreError", "Gagal mengambil data dari Firestore: ${exception.message}")
+                            serahTerimaSebelumnya = emptyList()
+                        }
+
+                } catch (e: Exception) {
+                    Log.e("ShiftCalc", "Gagal menentukan shift sebelumnya: ${e.message}")
+                }
+            }, listOf("Shift 1 08:00 - 16:00", "Shift 2 16:00 - 00:00", "Shift 3 00:00 - 08:00"))
             DropdownMenuInput("Group", group, { group = it }, listOf("Group A", "Group B", "Group C", "Group D"))
 
             Column {
@@ -310,6 +369,14 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 }
             }
 
+            if (serahTerimaSebelumnya.isNotEmpty()) {
+                Text("Agenda Serah Terima Shift Sebelumnya:", fontWeight = FontWeight.Bold)
+                serahTerimaSebelumnya.forEach { serahTerima ->
+                    Text("- $serahTerima")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             agendaList.forEachIndexed { index, textFieldValue ->
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
@@ -416,11 +483,10 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                             "cuti" to selectedCuti,
                             "izin" to selectedIzin,
                             "tlatribut" to selectedAtribut,
-                            "agenda" to agendaList.map { it.text },
+                            "agenda" to (serahTerimaSebelumnya + agendaList.map { it.text }),
                             "timestamp" to System.currentTimeMillis()
                         )
 
-                        // Gunakan coroutine untuk menjalankan proses penyimpanan di background thread
                         CoroutineScope(Dispatchers.IO).launch {
                             try {
                                 onSaveData(data, imageBitmap)
@@ -510,7 +576,10 @@ class FormSafetyBriefingActivity : ComponentActivity() {
         })
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun saveToFirestore(data: MutableMap<String, Any>, onResult: (Boolean) -> Unit) {
+        val currentDateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        data["tanggal"] = currentDateStr
         val documentRef = firestore.collection("agenda").document()
         data["briefingId"] = documentRef.id
         data["status"] = "aktif"
@@ -528,6 +597,28 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                 onResult(false)
             }
     }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun getPreviousShiftAndDate(currentShift: String, currentDate: LocalDate): Pair<String, LocalDate> {
+        val shifts = listOf(
+            "Shift 1 08:00 - 16:00",
+            "Shift 2 16:00 - 00:00",
+            "Shift 3 00:00 - 08:00"
+        )
+        val index = shifts.indexOf(currentShift)
+        Log.d("ShiftLogic", "Current shift: $currentShift, Index: $index") // 🔍 log posisi shift
+
+        if (index == -1) throw IllegalArgumentException("Shift tidak valid: $currentShift")
+
+        val previousIndex = if (index == 0) shifts.lastIndex else index - 1
+        val previousShift = shifts[previousIndex]
+        val adjustedDate = if (index == 0) currentDate.minusDays(1) else currentDate
+
+        Log.d("ShiftLogic", "Previous shift: $previousShift, Adjusted date: $adjustedDate") // 🔍 log hasil akhir
+
+        return previousShift to adjustedDate
+    }
+
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

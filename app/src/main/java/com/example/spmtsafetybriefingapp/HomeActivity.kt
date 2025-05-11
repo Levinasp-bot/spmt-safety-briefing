@@ -1,8 +1,9 @@
 package com.example.spmtsafetybriefingapp
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.provider.MediaStore
@@ -11,14 +12,16 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.location.Location
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,8 +45,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.LifecycleOwner
@@ -73,12 +79,18 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.sqrt
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.ZoneId
+import java.time.Instant
+
 
 class HomeActivity : ComponentActivity() {
     private lateinit var firestore: FirebaseFirestore
     private lateinit var auth: FirebaseAuth
     private var interpreter: Interpreter? = null
 
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         firestore = FirebaseFirestore.getInstance()
@@ -146,6 +158,7 @@ class HomeActivity : ComponentActivity() {
             }
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun HomeScreen(onAddBriefingClick: () -> Unit, navigateToPendingApproval: () -> Unit, userName: String, userRole: String) {
@@ -162,6 +175,10 @@ class HomeActivity : ComponentActivity() {
         var userGroup by remember { mutableStateOf("") }
         var userTerminal by remember { mutableStateOf("") }
         var userBranch by remember { mutableStateOf("") }
+        var totalBriefing by remember { mutableStateOf(0) }
+        var shift1Count by remember { mutableStateOf(0) }
+        var shift2Count by remember { mutableStateOf(0) }
+        var shift3Count by remember { mutableStateOf(0) }
 
         val allowedNames = listOf(
             "Eko Mardiyanto",
@@ -188,6 +205,7 @@ class HomeActivity : ComponentActivity() {
             }
         }
 
+
         fun fetchActiveAgenda() {
             isRefreshing = true
             coroutineScope.launch {
@@ -200,6 +218,7 @@ class HomeActivity : ComponentActivity() {
                         userBranch = userDoc.getString("branch") ?: ""
                         userTerminal = userDoc.getString("terminal") ?: ""
                         userGroup = userDoc.getString("group") ?: ""
+
 
                         val allowedRoles = listOf(
                             "Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
@@ -236,27 +255,53 @@ class HomeActivity : ComponentActivity() {
                         } else {
                             activeAgenda = emptyList()
                         }
+                        val agendaSnapshot = agendaQuery?.get()?.await()
+                        val agendaList = agendaSnapshot?.documents?.mapNotNull { document ->
+                            document.data?.toMutableMap()?.apply { put("id", document.id) }
+                        }
+                        totalBriefing = agendaList?.size ?: 0
+
+                        shift1Count = agendaList?.count {
+                            (it["shift"] as? String)?.contains("Shift 1") == true
+                        } ?: 0
+
+                        shift2Count = agendaList?.count {
+                            (it["shift"] as? String)?.contains("Shift 2") == true
+                        } ?: 0
+
+                        shift3Count = agendaList?.count {
+                            (it["shift"] as? String)?.contains("Shift 3") == true
+                        } ?: 0
+
                     }
                 } catch (e: Exception) {
                     Log.e("Firestore", "Error fetching agendas: ${e.message}")
                 } finally {
-                    isRefreshing = false // 🔹 Hentikan Refresh
+                    isRefreshing = false
                 }
             }
         }
 
-        // Panggil fetchActiveAgenda() saat pertama kali dibuka
         LaunchedEffect(Unit) {
             fetchActiveAgenda()
+        }
+
+        LaunchedEffect(pendingCount) {
+            if (pendingCount > 0) {
+                sendNotification(
+                    context,
+                    title = "Menunggu Persetujuan",
+                    message = "Terdapat $pendingCount pengguna menunggu persetujuan anda."
+                )
+            }
         }
 
         ModalNavigationDrawer(
             drawerState = scaffoldState,
             drawerContent = {
-                // Batasi lebar dan hilangkan padding ekstra
                 Box(
                     modifier = Modifier
-                        .width(280.dp) // atur sesuai kebutuhan
+                        .width(280.dp)
                         .fillMaxHeight()
                 ) {
                     DrawerContent(
@@ -311,8 +356,8 @@ class HomeActivity : ComponentActivity() {
                 bottomBar = { BottomNavigationBar() }
             ) { paddingValues ->
                 SwipeRefresh(
-                    state = rememberSwipeRefreshState(isRefreshing), // 🔹 Tambahkan SwipeRefresh
-                    onRefresh = { fetchActiveAgenda() } // 🔹 Panggil fungsi untuk refresh
+                    state = rememberSwipeRefreshState(isRefreshing),
+                    onRefresh = { fetchActiveAgenda() }
                 ) {
                     Column(
                         modifier = Modifier
@@ -370,22 +415,208 @@ class HomeActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-//                        val allowedRoles = setOf(
-//                            "Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
-//                            "Manager Operasi Jamrud", "Manager Operasi Nilam Mirah", "HSSE",
-//                            "Koordinator Operasi Jamrud", "Koordinator Operasi Nilam", "Koordinator Operasi Mirah"
-//                        )
+                        val dateFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy")
+                        var startDate by remember { mutableStateOf(LocalDate.now().minusDays(7)) }
+                        var endDate by remember { mutableStateOf(LocalDate.now()) }
 
-                        //if (userRole in allowedRoles && activeAgenda.isNotEmpty()) {
-                            //activeAgenda.forEach { agenda ->
-                                //val briefingId = agenda["id"]?.toString() ?: ""
-                                //if (briefingId.isNotEmpty()) {
-                                    //AttendanceDashboard(firestore)
-                                //} else {
-                                    //Log.e("Debug", "Briefing ID is empty")
-                                //}
-                            //}
+                        var showDateRangeDialog by remember { mutableStateOf(false) }
+                        var attendanceShift1 by remember { mutableStateOf(0) }
+                        var attendanceShift2 by remember { mutableStateOf(0) }
+                        var attendanceShift3 by remember { mutableStateOf(0) }
+
+                        if (showDateRangeDialog) {
+                            DateRangePickerDialog(
+                                onDismissRequest = { showDateRangeDialog = false },
+                                onDateRangeSelected = { startMillis, endMillis ->
+                                    startDate = Instant.ofEpochMilli(startMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                                    endDate = Instant.ofEpochMilli(endMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                                    showDateRangeDialog = false
+                                }
+                            )
                         }
+
+                        var filteredAgenda by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
+
+                        val allAgenda = remember { mutableStateListOf<Map<String, Any>>() }
+
+                        LaunchedEffect(Unit) {
+                            val snapshot = FirebaseFirestore.getInstance()
+                                .collection("agenda")
+                                .get()
+                                .await()
+
+                            allAgenda.clear()
+                            allAgenda.addAll(snapshot.documents.mapNotNull { it.data })
+                            Log.d("FilterAgenda", "All agenda fetched: ${allAgenda.size}")
+                        }
+
+                        fun parseShiftNumber(shiftValue: Any?): Int? {
+                            val shiftString = shiftValue as? String ?: return null
+                            return shiftString.split(" ").getOrNull(1)?.toIntOrNull()
+                        }
+
+                        fun filterAgendaByDate() {
+                            Log.d("FilterAgenda", "🚀 filterAgendaByDate() DIPANGGIL")
+
+                            filteredAgenda = allAgenda.filter { agenda ->
+                                val timestampMillis = when (val ts = agenda["timestamp"]) {
+                                    is com.google.firebase.Timestamp -> ts.toDate().time
+                                    is Long -> ts
+                                    else -> null
+                                }
+
+                                val shift = agenda["shift"]
+
+                                if (timestampMillis != null) {
+                                    val agendaDate = Instant.ofEpochMilli(timestampMillis)
+                                        .atZone(ZoneId.systemDefault())
+                                        .toLocalDate()
+                                    val isInRange = agendaDate.isAfter(startDate.minusDays(1)) && agendaDate.isBefore(endDate.plusDays(1))
+
+                                    val shiftNumber = parseShiftNumber(shift)
+                                    Log.d("FilterAgenda", "Item: $agenda")
+                                    Log.d("FilterAgenda", "→ Timestamp: $timestampMillis → agendaDate: $agendaDate")
+                                    Log.d("FilterAgenda", "→ Shift Raw: $shift → Parsed: $shiftNumber → In Range: $isInRange")
+
+                                    isInRange
+                                } else {
+                                    Log.d("FilterAgenda", "Item skipped: timestamp null atau tidak ditemukan → $agenda")
+                                    false
+                                }
+                            }
+
+                            Log.d("FilterAgenda", "Filtered ${filteredAgenda.size} agenda(s) between $startDate and $endDate")
+                            Log.d("FilterAgenda", "Total Briefing: ${filteredAgenda.size}")
+                            Log.d("FilterAgenda", "Shift 1 Count: ${filteredAgenda.count { parseShiftNumber(it["shift"]) == 1 }}")
+                            Log.d("FilterAgenda", "Shift 2 Count: ${filteredAgenda.count { parseShiftNumber(it["shift"]) == 2 }}")
+                            Log.d("FilterAgenda", "Shift 3 Count: ${filteredAgenda.count { parseShiftNumber(it["shift"]) == 3 }}")
+                        }
+
+                        totalBriefing = filteredAgenda.size
+                        shift1Count = filteredAgenda.count { parseShiftNumber(it["shift"]) == 1 }
+                        shift2Count = filteredAgenda.count { parseShiftNumber(it["shift"]) == 2 }
+                        shift3Count = filteredAgenda.count { parseShiftNumber(it["shift"]) == 3 }
+
+                        LaunchedEffect(startDate, endDate, allAgenda.toList()) {
+                            if (allAgenda.isNotEmpty()) {
+                                Log.d("AttendanceDebug", "📌 Mulai proses filter dan rekap")
+                                filterAgendaByDate()
+
+                                var shift1 = 0
+                                var shift2 = 0
+                                var shift3 = 0
+
+                                Log.d("AttendanceDebug", "📋 Jumlah agenda setelah filter: ${filteredAgenda.size}")
+
+                                filteredAgenda.forEach { agenda ->
+                                    val docId = agenda["briefingId"] as? String
+                                    if (docId == null) {
+                                        Log.w("AttendanceDebug", "⚠️ briefingId tidak ditemukan atau null → agenda: $agenda")
+                                        return@forEach
+                                    }
+
+                                    val shiftRaw = agenda["shift"]
+                                    val shift = parseShiftNumber(shiftRaw)
+                                    if (shift == null) {
+                                        Log.w("AttendanceDebug", "⚠️ Gagal parse shift → shift raw: $shiftRaw")
+                                        return@forEach
+                                    }
+
+                                    Log.d("AttendanceDebug", "✅ Memproses agenda → shift: $shift, docId: $docId")
+
+                                    try {
+                                        val attendanceSnapshot = FirebaseFirestore.getInstance()
+                                            .collection("agenda")
+                                            .document(docId)
+                                            .collection("attendance")
+                                            .get()
+                                            .await()
+
+                                        Log.d("AttendanceDebug", "👥 Jumlah attendance untuk shift $shift (docId: $docId): ${attendanceSnapshot.size()}")
+
+                                        when (shift) {
+                                            1 -> shift1 += attendanceSnapshot.size()
+                                            2 -> shift2 += attendanceSnapshot.size()
+                                            3 -> shift3 += attendanceSnapshot.size()
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("AttendanceDebug", "❌ Gagal mengambil attendance untuk docId: $docId", e)
+                                    }
+                                }
+
+                                attendanceShift1 = shift1
+                                attendanceShift2 = shift2
+                                attendanceShift3 = shift3
+
+                                Log.d("AttendanceDebug", "📊 Rekap final → Shift 1: $attendanceShift1, Shift 2: $attendanceShift2, Shift 3: $attendanceShift3")
+                            } else {
+                                Log.w("AttendanceDebug", "⚠️ allAgenda kosong, tidak ada data untuk diproses")
+                            }
+                        }
+
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                        ) {
+                            Text(
+                                text = "Rekap Pelaksanaan",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+
+                            OutlinedButton(
+                                onClick = { showDateRangeDialog = true },
+                                modifier = Modifier
+                                    .padding(bottom = 8.dp)
+                                    .align(Alignment.Start),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color(0xFF0E73A7)
+                                ),
+                                border = BorderStroke(1.dp, Color(0xFF0E73A7))
+                            ) {
+                                Text(
+                                    text = "Periode: ${dateFormatter.format(startDate)} - ${dateFormatter.format(endDate)}",
+                                    color = Color(0xFF0E73A7)
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                RekapCard(
+                                    title = "Total Briefing",
+                                    value = filteredAgenda.size.toString(),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                RekapCard(
+                                    title = "Shift 1",
+                                    value = filteredAgenda.count { parseShiftNumber(it["shift"]) == 1 }.toString(),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                RekapCard(
+                                    title = "Shift 2",
+                                    value = filteredAgenda.count { parseShiftNumber(it["shift"]) == 2 }.toString(),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                RekapCard(
+                                    title = "Shift 3",
+                                    value = filteredAgenda.count { parseShiftNumber(it["shift"]) == 3 }.toString(),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            AttendanceBarChart(
+                                attendanceShift1 = attendanceShift1,
+                                attendanceShift2 = attendanceShift2,
+                                attendanceShift3 = attendanceShift3
+                            )
+                        }
+                    }
                     }
                 }
             }
@@ -398,6 +629,57 @@ class HomeActivity : ComponentActivity() {
             .addOnSuccessListener { result ->
                 onResult(result.size())
             }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun DateRangePickerDialog(
+        onDismissRequest: () -> Unit,
+        onDateRangeSelected: (Long, Long) -> Unit
+    ) {
+        val datePickerState = rememberDateRangePickerState()
+
+        // Fungsi untuk memeriksa apakah kedua tanggal sudah terisi
+        val startDate = datePickerState.selectedStartDateMillis
+        val endDate = datePickerState.selectedEndDateMillis
+
+        if (startDate != null && endDate != null) {
+            // Menutup dialog secara otomatis setelah kedua tanggal terisi
+            onDateRangeSelected(startDate, endDate)
+            onDismissRequest() // Menutup dialog
+        }
+
+        DatePickerDialog(
+            onDismissRequest = onDismissRequest,
+            confirmButton = {
+                TextButton(onClick = {
+                    if (startDate != null && endDate != null) {
+                        onDateRangeSelected(startDate, endDate)
+                        onDismissRequest() // Menutup dialog
+                    }
+                }) {
+                    Text("Pilih")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissRequest) {
+                    Text("Batal")
+                }
+            }
+        ) {
+            DateRangePicker(
+                state = datePickerState,
+                modifier = Modifier.padding(horizontal = 8.dp) // Padding kiri-kanan yang lebih sedikit
+            )
+            if (startDate != null && endDate != null) {
+                Text(
+                    text = "Tanggal Mulai: ${LocalDate.ofInstant(Instant.ofEpochMilli(startDate), ZoneId.systemDefault())} - Tanggal Akhir: ${LocalDate.ofInstant(Instant.ofEpochMilli(endDate), ZoneId.systemDefault())}",
+                    fontSize = 7.sp, // Ukuran font lebih kecil
+                    modifier = Modifier.padding(2.dp)
+                )
+            }
+        }
     }
 
     fun fetchShiftFromAgenda(agendaId: String, onResult: (String?) -> Unit) {
@@ -432,7 +714,6 @@ class HomeActivity : ComponentActivity() {
         val timeNow = hour * 60 + minute
 
         return try {
-            // **Ambil data shift berdasarkan shiftName yang cocok**
             val querySnapshot = db.collection("shifts")
                 .whereEqualTo("shiftName", shift) // Cocokkan shift agenda dengan shiftName di Firestore
                 .get()
@@ -761,11 +1042,12 @@ class HomeActivity : ComponentActivity() {
                 }
 
                 val allowedRoles = listOf(
-                    "Branch Manager",
                     "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
-                    "Manager Operasi", // pakai startsWith buat ini
+                    "Manager Operasi",
                     "HSSE"
                 )
+
+                val isBranchManager = userRole == "Branch Manager"
 
                 val isAllowed = allowedRoles.any { role ->
                     if (role == "Manager Operasi") {
@@ -775,7 +1057,7 @@ class HomeActivity : ComponentActivity() {
                     }
                 }
 
-                if (!isAllowed) {
+                if (!isAllowed || isBranchManager) {
                     var isLoading by remember { mutableStateOf(false) }
 
                     Button(
@@ -798,7 +1080,8 @@ class HomeActivity : ComponentActivity() {
                                                                 firestore,
                                                                 location,
                                                                 userTerminal,
-                                                                tempat
+                                                                tempat,
+                                                                userRole
                                                             ) { isValid ->
                                                                 Log.d("AbsensiButton", "Status lokasi valid: $isValid")
 
@@ -888,9 +1171,26 @@ class HomeActivity : ComponentActivity() {
                     }
                 }
 
-
                 Spacer(modifier = Modifier.height(8.dp))
+                if (allowedKoor) {
 
+                    Button(
+                        onClick = {
+                            val intent = Intent(context, TambahAgendaSerahTerimaActivity::class.java).apply {
+                                putExtra("briefingId", briefingId) // 👈 kirim agenda ID
+                            }
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E73A7)),
+                        shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp))
+                    ) {
+                        Text("Tambah Agenda Serah Terima", color = Color.White)
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
                 if (allowedKoor || userName in allowedNames) {
                     Button(
                         onClick = {
@@ -952,6 +1252,106 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
+    @Composable
+    fun RekapCard(title: String, value: String, modifier: Modifier = Modifier) {
+        Card(
+            modifier = modifier
+                .padding(horizontal = 4.dp)
+                .height(100.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White
+            ),
+            elevation = CardDefaults.cardElevation(4.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        color = Color(0xFF0E73A7), // Ganti dengan biru utama aplikasimu
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = Color(0xFF0E73A7), // Warna biru juga
+                        fontSize = 12.sp
+                    ),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+    }
+
+    @Composable
+    fun AttendanceBarChart(
+        attendanceShift1: Int,
+        attendanceShift2: Int,
+        attendanceShift3: Int
+    ) {
+        val maxAttendance = listOf(attendanceShift1, attendanceShift2, attendanceShift3).maxOrNull() ?: 0
+        val barColor = Color(0xFF0E73A7) // Warna biru yang kamu minta
+
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "Jumlah Kehadiran per Shift",
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp), // tambahkan tinggi sedikit
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                SimpleBar("Shift 1", attendanceShift1, maxAttendance, barColor)
+                SimpleBar("Shift 2", attendanceShift2, maxAttendance, barColor)
+                SimpleBar("Shift 3", attendanceShift3, maxAttendance, barColor)
+            }
+        }
+    }
+
+    @Composable
+    fun SimpleBar(label: String, value: Int, max: Int, color: Color) {
+        val barHeightRatio = if (max == 0) 0f else value.toFloat() / max.toFloat()
+
+        Column(
+            modifier = Modifier
+                .width(50.dp)
+                .fillMaxHeight(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Bottom
+        ) {
+            // Nilai angka di atas batang
+            Text(
+                "$value",
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height((120 * barHeightRatio).dp) // tinggi batang proporsional
+                    .background(color, shape = RoundedCornerShape(4.dp))
+            )
+            Text(
+                label,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
 
     fun calculateCosineSimilarity(embedding1: List<Double>, embedding2: List<Double>): Double {
         val dotProduct = embedding1.zip(embedding2).sumOf { it.first * it.second }
@@ -982,7 +1382,6 @@ class HomeActivity : ComponentActivity() {
                                 if (similarity >= 0.4) {
                                     Toast.makeText(context, "Absensi berhasil!", Toast.LENGTH_SHORT).show()
 
-                                    // Arahkan ke halaman AbsensiResultActivity dengan briefingId
                                     val intent = Intent(context, AbsensiResultActivity::class.java).apply {
                                         putExtra("briefingId", briefingId)
                                     }
@@ -1109,7 +1508,35 @@ class HomeActivity : ComponentActivity() {
         buffer.rewind()
 
         return buffer
+    }
 
+    fun sendNotification(context: Context, title: String, message: String) {
+        val channelId = "approval_channel"
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "Approval Notification"
+            val importance = NotificationManager.IMPORTANCE_DEFAULT
+            val channel = NotificationChannel(channelId, name, importance)
+
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.drawable.notif) // ganti dengan icon yang kamu punya
+            .setContentTitle(title)
+            .setContentText(message)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            with(NotificationManagerCompat.from(context)) {
+                notify(101, builder.build())
+            }
+        } else {
+            Log.w("Notif", "Permission not granted to show notifications.")
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -1135,13 +1562,16 @@ class HomeActivity : ComponentActivity() {
         firestore: FirebaseFirestore,
         userLocation: Location?,
         userTerminal: String,
-        tempat: String, // 🟢 Terminal yang dipilih berdasarkan tombol yang ditekan
+        tempat: String,
+        userRole: String,
         callback: (Boolean) -> Unit
     ) {
-        // 🔹 Log terminal yang dipilih berdasarkan tombol yang ditekan
+        if (userRole == "Branch Manager") {
+            Log.d("GeoFence", "Branch Manager - melewati validasi lokasi")
+            return callback(true)
+        }
         Log.d("GeoFence", "Tempat Safety Briefing: $tempat")
 
-        // Tentukan daftar terminal yang diizinkan berdasarkan terminal pengguna
         val allowedTerminals = when (userTerminal) {
             "Terminal Jamrud" -> listOf("Terminal Jamrud")
             "Terminal Mirah", "Terminal Nilam" -> listOf("Terminal Mirah", "Terminal Nilam")
@@ -1153,7 +1583,6 @@ class HomeActivity : ComponentActivity() {
             return callback(false)
         }
 
-        // 🔹 Ambil lokasi berdasarkan terminal yang dipilih
         firestore.collection("geoFence").document(tempat).get()
             .addOnSuccessListener { geoFenceDoc ->
                 val geoPoint = geoFenceDoc.getGeoPoint("location")
@@ -1161,7 +1590,6 @@ class HomeActivity : ComponentActivity() {
                     val latitude = geoPoint.latitude
                     val longitude = geoPoint.longitude
 
-                    // 🔹 Log koordinat lokasi yang diambil dari Firestore
                     Log.d("GeoFence", "Koordinat lokasi dari Firestore: Latitude = $latitude, Longitude = $longitude")
 
                     val targetLocation = Location("").apply {
@@ -1278,7 +1706,6 @@ class HomeActivity : ComponentActivity() {
         NavigationBar(
             containerColor = Color(0xFF0E73A7) // Mengubah warna latar belakang
         ) {
-            // 🔹 Item Beranda
             NavigationBarItem(
                 icon = {
                     Icon(
@@ -1307,7 +1734,6 @@ class HomeActivity : ComponentActivity() {
                 )
             )
 
-            // 🔹 Item Dashboard (Menu Tengah)
             NavigationBarItem(
                 icon = {
                     Icon(
@@ -1336,7 +1762,6 @@ class HomeActivity : ComponentActivity() {
                 )
             )
 
-            // 🔹 Item Riwayat
             NavigationBarItem(
                 icon = {
                     Icon(
@@ -1383,9 +1808,8 @@ class HomeActivity : ComponentActivity() {
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
             }
         }
-
         return imageUri
     }
-    }
+}
 
 
