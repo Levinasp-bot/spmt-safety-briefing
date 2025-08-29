@@ -530,7 +530,6 @@ class EditFormActivity : ComponentActivity() {
                         "timestamp" to System.currentTimeMillis()
                     )
 
-                    // Gunakan coroutine untuk menjalankan proses penyimpanan di background thread
                     CoroutineScope(Dispatchers.IO).launch {
                         try {
                             onSaveData(data, imageBitmap)

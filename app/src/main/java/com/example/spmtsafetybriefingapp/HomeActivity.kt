@@ -31,8 +31,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -83,6 +85,11 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.ZoneId
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.LocalTime
+import kotlinx.coroutines.tasks.await
+import java.util.Date
+
 
 
 class HomeActivity : ComponentActivity() {
@@ -179,6 +186,7 @@ class HomeActivity : ComponentActivity() {
         var shift1Count by remember { mutableStateOf(0) }
         var shift2Count by remember { mutableStateOf(0) }
         var shift3Count by remember { mutableStateOf(0) }
+        var sudahMembuatAgendaHariIni by remember { mutableStateOf(false) }
 
         val allowedNames = listOf(
             "Eko Mardiyanto",
@@ -195,7 +203,7 @@ class HomeActivity : ComponentActivity() {
             "Herwanto"
         )
 
-        val allowedKoor = "Koordinator Operasi"
+        val allowedKoor = listOf("Koordinator Operasi") // ✅ ubah jadi list
 
         val isAllowedKoor = allowedKoor.any { userRole.startsWith(it) }
 
@@ -204,7 +212,6 @@ class HomeActivity : ComponentActivity() {
                 pendingCount = count
             }
         }
-
 
         fun fetchActiveAgenda() {
             isRefreshing = true
@@ -219,63 +226,99 @@ class HomeActivity : ComponentActivity() {
                         userTerminal = userDoc.getString("terminal") ?: ""
                         userGroup = userDoc.getString("group") ?: ""
 
+                        val today = LocalDate.now()
+                        val zoneId = ZoneId.systemDefault()
+                        val startOfDay = today.atStartOfDay(zoneId).toInstant()
+                        val endOfDay = today.atTime(LocalTime.MAX).atZone(zoneId).toInstant()
+                        val timestampStart = Timestamp(Date.from(startOfDay))
+                        val timestampEnd = Timestamp(Date.from(endOfDay))
 
+                        Log.d("AgendaDebug", "userName: '$userName'")
+                        Log.d("AgendaDebug", "timestampStart: $timestampStart")
+                        Log.d("AgendaDebug", "timestampEnd: $timestampEnd")
+
+                        // ✅ Cek apakah sudah membuat agenda hari ini
+                        try {
+                            val cekAgendaSnapshot = firestore.collection("agenda")
+                                .whereGreaterThanOrEqualTo("timestamp", timestampStart)
+                                .whereLessThanOrEqualTo("timestamp", timestampEnd)
+                                .whereEqualTo("koordinator", userName.trim())
+                                .get()
+                                .await()
+
+                            Log.d("AgendaDebug", "Snapshot diterima. Jumlah dokumen: ${cekAgendaSnapshot.size()}")
+
+                            if (cekAgendaSnapshot.isEmpty) {
+                                Log.d("AgendaDebug", "Tidak ada agenda ditemukan.")
+                            } else {
+                                cekAgendaSnapshot.documents.forEachIndexed { i, doc ->
+                                    val id = doc.id
+                                    val time = doc.getTimestamp("timestamp")?.toDate()
+                                    val koor = doc.getString("koordinator")
+                                    Log.d("AgendaDebug", "[$i] ID: $id | timestamp: $time | koordinator: '$koor'")
+                                }
+                            }
+
+                            sudahMembuatAgendaHariIni = cekAgendaSnapshot.documents.isNotEmpty()
+
+                        } catch (e: Exception) {
+                            Log.e("AgendaDebug", "Gagal ambil agenda hari ini: ${e.message}", e)
+                        }
+
+                        // 🔎 Query agenda aktif berdasarkan role
                         val allowedRoles = listOf(
                             "Branch Manager", "Deputy Branch Manager Perencanaan dan Pengendalian Operasi",
                             "Manager Operasi", "HSSE"
                         )
                         val userRoles = listOf(
-                            "Anggota Pengamanan", "Operasional", "Komandan Peleton", "Koordinator Lapangan Pengamanan",
-                            "Koordinator Operasi"
+                            "Anggota Pengamanan", "Operasional", "Komandan Peleton",
+                            "Koordinator Lapangan Pengamanan", "Koordinator Operasi"
                         )
+
                         val isAllowedRoles = allowedRoles.any { userRole.startsWith(it) }
                         val isUserRoles = userRoles.any { userRole.startsWith(it) }
-                        var agendaQuery: Query? = null
-                        when {
-                            isAllowedRoles || isUserRoles -> {
-                                agendaQuery = firestore.collection("agenda").whereEqualTo("status", "aktif")
-                                Log.d("Firestore", "Fetching active agendas for role: $userRole")
 
-                                when {
-                                    isUserRoles -> {
-                                        agendaQuery = agendaQuery.whereEqualTo("terminal", userTerminal)
-                                            .whereEqualTo("group", userGroup)
-                                        Log.d("Firestore", "Security & Operatioanl Role Filter Applied -> Terminal: $userTerminal, Group: $userGroup")
-                                    }
-                                }
+                        var agendaQuery: Query? = null
+
+                        if (isAllowedRoles || isUserRoles) {
+                            agendaQuery = firestore.collection("agenda")
+                                .whereEqualTo("status", "aktif")
+
+                            if (isUserRoles) {
+                                agendaQuery = agendaQuery
+                                    .whereEqualTo("terminal", userTerminal)
+                                    .whereEqualTo("group", userGroup)
+
+                                Log.d("Firestore", "Filtered by terminal: $userTerminal, group: $userGroup")
                             }
-                            else -> Log.d("Firestore", "User role $userRole is not allowed to fetch agendas.")
+                        } else {
+                            Log.d("Firestore", "User role $userRole tidak diizinkan melihat agenda aktif.")
                         }
 
                         if (agendaQuery != null) {
                             val agendaSnapshot = agendaQuery.get().await()
-                            activeAgenda = agendaSnapshot.documents.mapNotNull { document ->
-                                document.data?.toMutableMap()?.apply { put("id", document.id) }
+
+                            activeAgenda = agendaSnapshot.documents.mapNotNull { doc ->
+                                doc.data?.toMutableMap()?.apply { put("id", doc.id) }
                             }
+
+                            val agendaList = activeAgenda // untuk keperluan rekap shift
+                            totalBriefing = agendaList.size
+
+                            shift1Count = agendaList.count { (it["shift"] as? String)?.contains("Shift 1") == true }
+                            shift2Count = agendaList.count { (it["shift"] as? String)?.contains("Shift 2") == true }
+                            shift3Count = agendaList.count { (it["shift"] as? String)?.contains("Shift 3") == true }
+
                         } else {
                             activeAgenda = emptyList()
+                            totalBriefing = 0
+                            shift1Count = 0
+                            shift2Count = 0
+                            shift3Count = 0
                         }
-                        val agendaSnapshot = agendaQuery?.get()?.await()
-                        val agendaList = agendaSnapshot?.documents?.mapNotNull { document ->
-                            document.data?.toMutableMap()?.apply { put("id", document.id) }
-                        }
-                        totalBriefing = agendaList?.size ?: 0
-
-                        shift1Count = agendaList?.count {
-                            (it["shift"] as? String)?.contains("Shift 1") == true
-                        } ?: 0
-
-                        shift2Count = agendaList?.count {
-                            (it["shift"] as? String)?.contains("Shift 2") == true
-                        } ?: 0
-
-                        shift3Count = agendaList?.count {
-                            (it["shift"] as? String)?.contains("Shift 3") == true
-                        } ?: 0
-
                     }
                 } catch (e: Exception) {
-                    Log.e("Firestore", "Error fetching agendas: ${e.message}")
+                    Log.e("Firestore", "Error fetching agendas: ${e.message}", e)
                 } finally {
                     isRefreshing = false
                 }
@@ -359,14 +402,16 @@ class HomeActivity : ComponentActivity() {
                     state = rememberSwipeRefreshState(isRefreshing),
                     onRefresh = { fetchActiveAgenda() }
                 ) {
+                    val scrollState = rememberScrollState()
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
+                            .verticalScroll(scrollState)
                             .padding(paddingValues)
                             .padding(8.dp),
                         verticalArrangement = Arrangement.Top,
                         horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+                    ){
                         Text(
                             text = "Agenda Safety Briefing",
                             fontSize = 16.sp,
@@ -398,7 +443,7 @@ class HomeActivity : ComponentActivity() {
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
 
-                                    if (isAllowedKoor || userName in allowedNames) {
+                                    if ((isAllowedKoor || userName in allowedNames) && !sudahMembuatAgendaHariIni) {
                                         Image(
                                             painter = painterResource(id = R.drawable.ic_action_name),
                                             contentDescription = "Tambah Briefing",
@@ -406,8 +451,13 @@ class HomeActivity : ComponentActivity() {
                                                 .size(80.dp)
                                                 .clickable { onAddBriefingClick() }
                                         )
+                                    } else if (sudahMembuatAgendaHariIni && (isAllowedKoor || userName in allowedNames)) {
+                                        Text(
+                                            text = "Anda sudah membuat agenda safety briefing",
+                                            color = Color.Gray,
+                                            fontSize = 14.sp
+                                        )
                                     }
-
                                     Text(text = "Tidak ada safety briefing aktif", color = Color.Gray, fontSize = 14.sp)
                                 }
                             }
@@ -456,8 +506,6 @@ class HomeActivity : ComponentActivity() {
                         }
 
                         fun filterAgendaByDate() {
-                            Log.d("FilterAgenda", "🚀 filterAgendaByDate() DIPANGGIL")
-
                             filteredAgenda = allAgenda.filter { agenda ->
                                 val timestampMillis = when (val ts = agenda["timestamp"]) {
                                     is com.google.firebase.Timestamp -> ts.toDate().time
@@ -468,28 +516,26 @@ class HomeActivity : ComponentActivity() {
                                 val shift = agenda["shift"]
 
                                 if (timestampMillis != null) {
-                                    val agendaDate = Instant.ofEpochMilli(timestampMillis)
+                                    val zonedDateTime = Instant.ofEpochMilli(timestampMillis)
                                         .atZone(ZoneId.systemDefault())
-                                        .toLocalDate()
-                                    val isInRange = agendaDate.isAfter(startDate.minusDays(1)) && agendaDate.isBefore(endDate.plusDays(1))
+
+                                    // Geser tanggal ke hari berikutnya jika jam >= 23
+                                    val adjustedDate = if (zonedDateTime.hour >= 23) {
+                                        zonedDateTime.toLocalDate().plusDays(1)
+                                    } else {
+                                        zonedDateTime.toLocalDate()
+                                    }
+
+                                    // Bandingkan apakah tanggal hasil penyesuaian masuk dalam range
+                                    val isInRange = !adjustedDate.isBefore(startDate) && !adjustedDate.isAfter(endDate)
 
                                     val shiftNumber = parseShiftNumber(shift)
-                                    Log.d("FilterAgenda", "Item: $agenda")
-                                    Log.d("FilterAgenda", "→ Timestamp: $timestampMillis → agendaDate: $agendaDate")
-                                    Log.d("FilterAgenda", "→ Shift Raw: $shift → Parsed: $shiftNumber → In Range: $isInRange")
 
                                     isInRange
                                 } else {
-                                    Log.d("FilterAgenda", "Item skipped: timestamp null atau tidak ditemukan → $agenda")
                                     false
                                 }
                             }
-
-                            Log.d("FilterAgenda", "Filtered ${filteredAgenda.size} agenda(s) between $startDate and $endDate")
-                            Log.d("FilterAgenda", "Total Briefing: ${filteredAgenda.size}")
-                            Log.d("FilterAgenda", "Shift 1 Count: ${filteredAgenda.count { parseShiftNumber(it["shift"]) == 1 }}")
-                            Log.d("FilterAgenda", "Shift 2 Count: ${filteredAgenda.count { parseShiftNumber(it["shift"]) == 2 }}")
-                            Log.d("FilterAgenda", "Shift 3 Count: ${filteredAgenda.count { parseShiftNumber(it["shift"]) == 3 }}")
                         }
 
                         totalBriefing = filteredAgenda.size
@@ -499,14 +545,11 @@ class HomeActivity : ComponentActivity() {
 
                         LaunchedEffect(startDate, endDate, allAgenda.toList()) {
                             if (allAgenda.isNotEmpty()) {
-                                Log.d("AttendanceDebug", "📌 Mulai proses filter dan rekap")
                                 filterAgendaByDate()
 
                                 var shift1 = 0
                                 var shift2 = 0
                                 var shift3 = 0
-
-                                Log.d("AttendanceDebug", "📋 Jumlah agenda setelah filter: ${filteredAgenda.size}")
 
                                 filteredAgenda.forEach { agenda ->
                                     val docId = agenda["briefingId"] as? String
@@ -522,8 +565,6 @@ class HomeActivity : ComponentActivity() {
                                         return@forEach
                                     }
 
-                                    Log.d("AttendanceDebug", "✅ Memproses agenda → shift: $shift, docId: $docId")
-
                                     try {
                                         val attendanceSnapshot = FirebaseFirestore.getInstance()
                                             .collection("agenda")
@@ -531,8 +572,6 @@ class HomeActivity : ComponentActivity() {
                                             .collection("attendance")
                                             .get()
                                             .await()
-
-                                        Log.d("AttendanceDebug", "👥 Jumlah attendance untuk shift $shift (docId: $docId): ${attendanceSnapshot.size()}")
 
                                         when (shift) {
                                             1 -> shift1 += attendanceSnapshot.size()
@@ -547,8 +586,6 @@ class HomeActivity : ComponentActivity() {
                                 attendanceShift1 = shift1
                                 attendanceShift2 = shift2
                                 attendanceShift3 = shift3
-
-                                Log.d("AttendanceDebug", "📊 Rekap final → Shift 1: $attendanceShift1, Shift 2: $attendanceShift2, Shift 3: $attendanceShift3")
                             } else {
                                 Log.w("AttendanceDebug", "⚠️ allAgenda kosong, tidak ada data untuk diproses")
                             }

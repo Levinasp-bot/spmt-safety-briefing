@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -159,6 +160,17 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
                     }
                 }
 
+                CardSection("Agenda Serah Terima") {
+                    val serahTerimaList = (data["serahTerima"] as? List<*>)?.mapNotNull { it.toString() } ?: emptyList()
+                    if (serahTerimaList.isNotEmpty()) {
+                        serahTerimaList.forEachIndexed { index, item ->
+                            Text(text = "${index + 1}. $item", fontSize = 14.sp)
+                        }
+                    } else {
+                        Text("Belum ada agenda serah terima", fontSize = 14.sp, fontWeight = FontWeight.Light)
+                    }
+                }
+
                 CardSection("Jumlah Pekerja (Orang)") {
                     DetailItem("Hadir", jumlahHadir.toString())
                     DetailItem("Sakit", jumlahSakit.toString())
@@ -194,6 +206,27 @@ fun DetailSafetyBriefingScreen(briefingId: String) {
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        val intent = Intent(context, EditFormActivity::class.java)
+                        intent.putExtra("briefingId", briefingId)
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color.White,
+                        contentColor = Color(0xFF0E73A7)
+                    ),
+                    shape = MaterialTheme.shapes.small.copy(all = CornerSize(8.dp)),
+                    border = BorderStroke(1.dp, Color(0xFF0E73A7))
+                ) {
+                    Text("Edit Agenda", fontSize = 16.sp)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp)) // Spacer antar tombol
 
                 Button(
                     onClick = {

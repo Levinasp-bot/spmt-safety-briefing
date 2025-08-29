@@ -67,23 +67,29 @@ fun AbsensiResultScreen(briefingId: String, fusedLocationClient: FusedLocationPr
         Log.d("AbsensiResult", "Fetching data for briefingId: $briefingId")
         if (briefingId.isNotEmpty()) {
             try {
-                val attendanceRef = firestore.collection("agenda")
-                    .document(briefingId)
-                    .collection("attendance")
-                    .orderBy("timestamp", Query.Direction.DESCENDING)
-                    .limit(1)
-                    .get()
-                    .await()
+                val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+                if (currentUserId != null) {
+                    val attendanceRef = firestore.collection("agenda")
+                        .document(briefingId)
+                        .collection("attendance")
+                        .whereEqualTo("userId", currentUserId)
+                        .orderBy("timestamp", Query.Direction.DESCENDING)
+                        .limit(1)
+                        .get()
+                        .await()
 
-                if (!attendanceRef.isEmpty) {
-                    val latestAttendance = attendanceRef.documents[0]
-                    userName = latestAttendance.getString("userName") ?: "Unknown"
-                    photoUri = latestAttendance.getString("photoUri")?.toUri()
-                    val firestoreTimestamp = latestAttendance.getTimestamp("timestamp")
-                    timestamp = firestoreTimestamp?.toDate()?.time ?: 0L
-                    Log.d("AbsensiResult", "Fetched Data - Name: $userName, Timestamp: $timestamp, Location: $location")
+                    if (!attendanceRef.isEmpty) {
+                        val latestAttendance = attendanceRef.documents[0]
+                        userName = latestAttendance.getString("userName") ?: "Unknown"
+                        photoUri = latestAttendance.getString("photoUri")?.toUri()
+                        val firestoreTimestamp = latestAttendance.getTimestamp("timestamp")
+                        timestamp = firestoreTimestamp?.toDate()?.time ?: 0L
+                        Log.d("AbsensiResult", "Fetched Data - Name: $userName, Timestamp: $timestamp, Location: $location")
+                    } else {
+                        Log.w("AbsensiResult", "No attendance data found for current user")
+                    }
                 } else {
-                    Log.w("AbsensiResult", "No attendance data found")
+                    Log.e("AbsensiResult", "User not logged in")
                 }
             } catch (e: Exception) {
                 Log.e("AbsensiResult", "Error fetching attendance data", e)

@@ -60,6 +60,7 @@ import java.io.IOException
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Calendar
 import java.util.Date
 
 class FormSafetyBriefingActivity : ComponentActivity() {
@@ -473,6 +474,8 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                             else -> "Tidak diketahui"
                         }
 
+                        val timestampNow = System.currentTimeMillis()
+
                         val data = mapOf(
                             "terminal" to terminal,
                             "tempat" to tempat,
@@ -484,25 +487,51 @@ class FormSafetyBriefingActivity : ComponentActivity() {
                             "izin" to selectedIzin,
                             "tlatribut" to selectedAtribut,
                             "agenda" to (serahTerimaSebelumnya + agendaList.map { it.text }),
-                            "timestamp" to System.currentTimeMillis()
+                            "timestamp" to timestampNow
                         )
 
-                        CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                onSaveData(data, imageBitmap)
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, "Menyimpan Agenda...", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, "Gagal menyimpan data: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
-                            } finally {
-                                withContext(Dispatchers.Main) {
-                                    isLoading = true
+                        // 🔹 Hitung start & end of day untuk cek tanggal
+                        val cal = Calendar.getInstance().apply { timeInMillis = timestampNow }
+                        cal.set(Calendar.HOUR_OF_DAY, 0)
+                        cal.set(Calendar.MINUTE, 0)
+                        cal.set(Calendar.SECOND, 0)
+                        cal.set(Calendar.MILLISECOND, 0)
+                        val startOfDay = Timestamp(cal.time)
+
+                        cal.add(Calendar.DAY_OF_MONTH, 1)
+                        val endOfDay = Timestamp(cal.time)
+
+                        val firestore = FirebaseFirestore.getInstance()
+                        firestore.collection("agenda")
+                            .whereEqualTo("terminal", terminal)
+                            .whereEqualTo("shift", shift)
+                            .whereGreaterThanOrEqualTo("timestamp", startOfDay)
+                            .whereLessThan("timestamp", endOfDay)
+                            .get()
+                            .addOnSuccessListener { result ->
+                                if (!result.isEmpty) {
+                                    // ❌ Sudah ada agenda di shift + tanggal yang sama
+                                    isLoading = false
+                                    Toast.makeText(context, "Anda sudah membuat agenda untuk shift ini", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    // ✅ Belum ada, lanjut simpan
+                                    firestore.collection("agenda")
+                                        .add(data)
+                                        .addOnSuccessListener {
+                                            isLoading = false
+                                            Toast.makeText(context, "Data tersimpan", Toast.LENGTH_SHORT).show()
+                                            context.startActivity(Intent(context, HomeActivity::class.java))
+                                        }
+                                        .addOnFailureListener { e ->
+                                            isLoading = false
+                                            Toast.makeText(context, "Gagal menyimpan data: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
                                 }
                             }
-                        }
+                            .addOnFailureListener { e ->
+                                isLoading = false
+                                Toast.makeText(context, "Gagal cek agenda: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
                     }
                 },
                 enabled = !isLoading,
@@ -524,6 +553,58 @@ class FormSafetyBriefingActivity : ComponentActivity() {
             }
         }
     }
+
+    private fun saveToFirestoreWithCheck(
+        data: Map<String, Any>,
+        imageBitmap: Bitmap?,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val firestore = FirebaseFirestore.getInstance()
+
+        val terminal = data["terminal"] as String
+        val shift = data["shift"] as String
+        val timestamp = data["timestamp"] as Long
+
+        // Ambil tanggal (tanpa jam) dari timestamp
+        val calendar = Calendar.getInstance().apply { timeInMillis = timestamp }
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        val startOfDay = calendar.time
+
+        calendar.add(Calendar.DAY_OF_MONTH, 1)
+        val endOfDay = calendar.time
+
+        val startTimestamp = com.google.firebase.Timestamp(startOfDay)
+        val endTimestamp = com.google.firebase.Timestamp(endOfDay)
+
+        // 🔹 Cek apakah sudah ada agenda dengan terminal + shift + tanggal sama
+        firestore.collection("agenda")
+            .whereEqualTo("terminal", terminal)
+            .whereEqualTo("shift", shift)
+            .whereGreaterThanOrEqualTo("timestamp", startTimestamp)
+            .whereLessThan("timestamp", endTimestamp)
+            .get()
+            .addOnSuccessListener { result ->
+                if (!result.isEmpty) {
+                    // ❌ Sudah ada agenda untuk tanggal & shift ini
+                    onResult(false, "Anda sudah membuat agenda untuk shift ini")
+                } else {
+                    // ✅ Belum ada → lanjut simpan
+                    firestore.collection("agenda")
+                        .add(data)
+                        .addOnSuccessListener { onResult(true, "Data tersimpan") }
+                        .addOnFailureListener { e ->
+                            onResult(false, "Gagal menyimpan data: ${e.message}")
+                        }
+                }
+            }
+            .addOnFailureListener { e ->
+                onResult(false, "Gagal cek agenda: ${e.message}")
+            }
+    }
+
 
     fun uploadImageToCloudinary(bitmap: Bitmap, onResult: (String?) -> Unit) {
         val baos = ByteArrayOutputStream()
